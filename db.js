@@ -46,7 +46,6 @@ async function init() {
     CREATE TABLE IF NOT EXISTS targets (
       year                   INTEGER PRIMARY KEY,
       net_worth_target       REAL NOT NULL DEFAULT 0,   -- combined net worth to reach by year end
-      annual_savings_target  REAL NOT NULL DEFAULT 0,   -- total to save across the year (combined)
       monthly_savings_target REAL NOT NULL DEFAULT 0,   -- combined amount to save each month
       updated_at             TEXT NOT NULL
     );

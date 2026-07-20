@@ -26,12 +26,15 @@ Built with Node + Express + SQLite. All figures are in **GBP (£)**.
     saving momentum, cash-vs-investment balance, and time-to-milestone
   - **Goals progress strip** summarising how you're tracking against this
     year's targets
-- **Targets tab** — set shared goals for any year and track progress:
+- **Targets tab** — set two shared, linked goals for any year and track
+  progress:
   - Net worth to reach by year end
-  - Total amount to save during the year
   - Monthly saving target
-  Each goal gets a progress bar plus tailored guidance on the monthly pace
-  needed to hit it, whether you're on track, and how to close any gap.
+  The two are two views of the same plan and stay in sync: editing one
+  recalculates the other from today's net worth and the months left in the
+  year (monthly saving × months remaining + net worth now = year-end net
+  worth). Each goal gets a progress bar plus tailored guidance on whether
+  you're on track and how to close any gap.
 - Rename each partner to your actual names.
 - Everything is stored in a shared SQLite database, so whatever one of you
   saves is instantly visible to the other.

@@ -160,8 +160,13 @@ button:active { transform: translateY(1px); }
 
 /* ---- targets / goals ---- */
 .targets-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.form-grid-3 { grid-template-columns: repeat(3, 1fr); }
-@media (max-width: 720px) { .form-grid-3 { grid-template-columns: 1fr; } }
+
+.link-note {
+  margin-top: 14px; padding: 11px 14px; font-size: 13px; line-height: 1.5;
+  color: var(--muted); background: rgba(91, 140, 255, 0.08);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.link-note strong { color: var(--text); font-weight: 700; }
 
 .year-switch { display: flex; align-items: center; gap: 10px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 5px 8px; }
 .year-switch .year-label { font-weight: 700; font-size: 16px; min-width: 48px; text-align: center; }

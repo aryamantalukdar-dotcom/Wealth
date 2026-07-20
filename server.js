@@ -183,18 +183,16 @@ app.post('/api/targets', async (req, res, next) => {
     const args = {
       year,
       net_worth_target: Math.max(0, num(b.net_worth_target)),
-      annual_savings_target: Math.max(0, num(b.annual_savings_target)),
       monthly_savings_target: Math.max(0, num(b.monthly_savings_target)),
       updated_at: new Date().toISOString(),
     };
     await db.execute({
       sql: `INSERT INTO targets
-         (year, net_worth_target, annual_savings_target, monthly_savings_target, updated_at)
+         (year, net_worth_target, monthly_savings_target, updated_at)
        VALUES
-         (:year, :net_worth_target, :annual_savings_target, :monthly_savings_target, :updated_at)
+         (:year, :net_worth_target, :monthly_savings_target, :updated_at)
        ON CONFLICT(year) DO UPDATE SET
          net_worth_target       = :net_worth_target,
-         annual_savings_target  = :annual_savings_target,
          monthly_savings_target = :monthly_savings_target,
          updated_at             = :updated_at`,
       args,

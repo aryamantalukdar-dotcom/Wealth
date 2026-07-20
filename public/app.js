@@ -7,7 +7,7 @@
 const state = {
   partners: [],   // [{id, name}]
   entries: [],    // [{id, partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved}]
-  targets: [],    // [{year, net_worth_target, annual_savings_target, monthly_savings_target}]
+  targets: [],    // [{year, net_worth_target, monthly_savings_target}]
   view: 'dashboard',
   targetYear: new Date().getFullYear(),
 };
@@ -131,13 +131,6 @@ function combinedNetNow() {
 
 // targets row for a year, or null
 const targetsFor = (year) => state.targets.find((t) => Number(t.year) === year) || null;
-
-// total combined amount saved during a calendar year (sum of monthly_saved)
-function savedInYear(year) {
-  return state.entries
-    .filter((e) => e.month.startsWith(String(year) + '-'))
-    .reduce((sum, e) => sum + e.monthly_saved, 0);
-}
 
 // months from now (inclusive of the current month) through December of `year`.
 // 0 if that December is already in the past.
@@ -615,12 +608,13 @@ function historyTable(es) {
 // ---- Targets view ----------------------------------------------------------
 
 // Compute every progress figure for a year's targets in one place.
+// The net-worth goal and the monthly-saving goal are two views of the same
+// plan: monthly_saving × months_remaining + net_worth_now = net_worth_by_year_end.
 function targetMetrics(year) {
   const t = targetsFor(year) || {
-    net_worth_target: 0, annual_savings_target: 0, monthly_savings_target: 0,
+    net_worth_target: 0, monthly_savings_target: 0,
   };
   const netNow = combinedNetNow();
-  const saved = savedInYear(year);
   const monthsLeft = monthsRemainingInYear(year);
   const avgSaved = averageCombinedMonthlySaved();
 
@@ -629,23 +623,25 @@ function targetMetrics(year) {
   const nwReqMonthly = t.net_worth_target > 0 ? (monthsLeft > 0 ? nwGap / monthsLeft : nwGap) : 0;
   const nwPct = t.net_worth_target > 0 ? clampPct(netNow / t.net_worth_target * 100) : 0;
 
-  // annual savings
-  const asRemaining = t.annual_savings_target - saved;
-  const asReqMonthly = t.annual_savings_target > 0 ? (monthsLeft > 0 ? asRemaining / monthsLeft : asRemaining) : 0;
-  const asPct = t.annual_savings_target > 0 ? clampPct(saved / t.annual_savings_target * 100) : 0;
-
   // monthly savings (measured against average monthly saving)
   const msPct = t.monthly_savings_target > 0 ? clampPct(avgSaved / t.monthly_savings_target * 100) : 0;
 
-  return { t, netNow, saved, monthsLeft, avgSaved, nwGap, nwReqMonthly, nwPct, asRemaining, asReqMonthly, asPct, msPct };
+  return { t, netNow, monthsLeft, avgSaved, nwGap, nwReqMonthly, nwPct, msPct };
 }
+
+// The two-way link between the goals: net worth needed given a monthly amount,
+// and the monthly amount needed given a net-worth goal.
+const netWorthFromMonthly = (monthly, netNow, monthsLeft) => netNow + monthly * monthsLeft;
+const monthlyFromNetWorth = (netWorth, netNow, monthsLeft) =>
+  monthsLeft > 0 ? Math.max(0, (netWorth - netNow) / monthsLeft) : 0;
 
 function renderTargets() {
   const year = state.targetYear;
   const m = targetMetrics(year);
   const t = m.t;
-  const hasAny = t.net_worth_target || t.annual_savings_target || t.monthly_savings_target;
+  const hasAny = t.net_worth_target || t.monthly_savings_target;
   const isPast = m.monthsLeft === 0;
+  const monthWord = m.monthsLeft === 1 ? 'month' : 'months';
 
   appEl.innerHTML = `
     <div class="targets-head">
@@ -663,31 +659,31 @@ function renderTargets() {
     <div class="card">
       <h3>Set targets for ${year}</h3>
       <form id="targetForm">
-        <div class="form-grid form-grid-3">
+        <div class="form-grid">
           <div class="field">
             <label for="t_networth">Net worth by end of ${year} <span class="hint">£ combined</span></label>
-            <input type="number" step="100" id="t_networth" placeholder="0" value="${t.net_worth_target || ''}" />
-          </div>
-          <div class="field">
-            <label for="t_annual">Total to save during ${year} <span class="hint">£ combined</span></label>
-            <input type="number" step="100" id="t_annual" placeholder="0" value="${t.annual_savings_target || ''}" />
+            <input type="number" step="any" min="0" id="t_networth" placeholder="0" value="${t.net_worth_target || ''}" />
           </div>
           <div class="field">
             <label for="t_monthly">Monthly saving target <span class="hint">£ combined / month</span></label>
-            <input type="number" step="50" id="t_monthly" placeholder="0" value="${t.monthly_savings_target || ''}" />
+            <input type="number" step="any" min="0" id="t_monthly" placeholder="0" value="${t.monthly_savings_target || ''}" />
           </div>
+        </div>
+        <div class="link-note">
+          🔗 These two are linked. ${isPast
+            ? `${year} is over, so they can't be recalculated from months remaining.`
+            : `From today's net worth of <strong>${money(m.netNow)}</strong> and <strong>${m.monthsLeft} ${monthWord}</strong> left in ${year}, changing one updates the other automatically.`}
         </div>
         <div class="form-actions">
           <button type="submit" class="btn-primary">Save targets</button>
-          <span class="hint" style="color:var(--muted);font-size:13px">Tip: monthly target × 12 is a good starting point for the annual goal.</span>
+          <span class="hint" style="color:var(--muted);font-size:13px">Edit either field — we'll keep them consistent.</span>
         </div>
       </form>
     </div>
 
     ${hasAny ? `
-      <div class="grid cols-3 section-gap">
+      <div class="grid cols-2 section-gap">
         ${nwCard(m, year, isPast)}
-        ${asCard(m, year, isPast)}
         ${msCard(m, year)}
       </div>
       <div class="card section-gap">
@@ -701,13 +697,28 @@ function renderTargets() {
   document.getElementById('yearPrev').addEventListener('click', () => { state.targetYear = clampYear(year - 1); render(); });
   document.getElementById('yearNext').addEventListener('click', () => { state.targetYear = clampYear(year + 1); render(); });
 
+  // Two-way link: editing one goal recomputes the other from today's net worth
+  // and the months left in the year. Assigning .value does not fire 'input',
+  // so there's no feedback loop.
+  const nwInput = document.getElementById('t_networth');
+  const msInput = document.getElementById('t_monthly');
+  if (!isPast) {
+    nwInput.addEventListener('input', () => {
+      const monthly = monthlyFromNetWorth(Number(nwInput.value || 0), m.netNow, m.monthsLeft);
+      msInput.value = nwInput.value === '' ? '' : Math.round(monthly);
+    });
+    msInput.addEventListener('input', () => {
+      const nw = netWorthFromMonthly(Number(msInput.value || 0), m.netNow, m.monthsLeft);
+      nwInput.value = msInput.value === '' ? '' : Math.round(nw);
+    });
+  }
+
   document.getElementById('targetForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     try {
       await api.saveTargets({
         year,
         net_worth_target: getVal('t_networth'),
-        annual_savings_target: getVal('t_annual'),
         monthly_savings_target: getVal('t_monthly'),
       });
       await api.load();
@@ -745,19 +756,6 @@ function nwCard(m, year, isPast) {
   return targetCard(`Net worth by Dec ${year}`, money(m.netNow), 'of ' + money(t.net_worth_target), m.nwPct, ok, status);
 }
 
-function asCard(m, year, isPast) {
-  const t = m.t;
-  if (!t.annual_savings_target) return placeholderCard('Annual savings goal', `No annual savings target set for ${year}.`);
-  const done = m.asRemaining <= 0;
-  const ok = done || m.avgSaved >= m.asReqMonthly;
-  const status = done
-    ? `goal hit 🎉`
-    : isPast
-      ? `year ended ${money(Math.abs(m.asRemaining))} short`
-      : `${money(m.asRemaining)} left · need ~${money(m.asReqMonthly)}/mo`;
-  return targetCard(`Saved in ${year}`, money(m.saved), 'of ' + money(t.annual_savings_target), m.asPct, ok, status);
-}
-
 function msCard(m, year) {
   const t = m.t;
   if (!t.monthly_savings_target) return placeholderCard('Monthly savings goal', 'No monthly target set.');
@@ -790,35 +788,21 @@ function renderTargetInsights(m, year) {
     }
   }
 
-  if (t.annual_savings_target) {
-    if (m.asRemaining <= 0) {
-      items.push(insight('🏆', 'Annual savings goal hit',
-        `You've put away ${money(m.saved)} this year — goal smashed. Consider redirecting new savings toward investments or clearing debt.`));
-    } else if (isPast) {
-      items.push(insight('📅', 'Savings year closed',
-        `You saved ${money(m.saved)} of the ${money(t.annual_savings_target)} target. Carry the shortfall into next year's plan.`));
-    } else {
-      const ok = m.avgSaved >= m.asReqMonthly;
-      items.push(insight(ok ? '✅' : '⚠️', ok ? 'Savings pace looks good' : 'Pick up the savings pace',
-        `You've banked ${money(m.saved)} of ${money(t.annual_savings_target)}. To finish you need ${money(m.asReqMonthly)}/month for the ${m.monthsLeft} months left${ok ? " — you're ahead of that." : `, versus ${money(m.avgSaved)}/mo now.`}`));
-    }
-  }
-
   if (t.monthly_savings_target) {
     const diff = m.avgSaved - t.monthly_savings_target;
     if (diff >= 0) {
       items.push(insight('💪', 'Beating your monthly target',
-        `Your average ${money(m.avgSaved)}/month is ${money(diff)} above target. Funnel the extra at your credit card first, then investments.`));
+        `Your average ${money(m.avgSaved)}/month is ${money(diff)} above the ${money(t.monthly_savings_target)} you're aiming for. Funnel the extra at your credit card first, then investments.`));
     } else {
       items.push(insight('🔧', 'Closing the monthly gap',
         `You're ${money(-diff)}/month below your ${money(t.monthly_savings_target)} target. Easy wins: a payday standing order, trimming one recurring subscription, or sending any windfall straight to savings.`));
     }
   }
 
-  // Sanity-check: does the monthly target actually support the net-worth goal?
-  if (t.monthly_savings_target && t.net_worth_target && !isPast && m.nwReqMonthly > t.monthly_savings_target * 1.05) {
-    items.push(insight('🧮', 'Your goals don’t quite line up',
-      `Your net-worth goal implies ~${money(m.nwReqMonthly)}/month, but your monthly target is only ${money(t.monthly_savings_target)}. Raise the monthly target or give the net-worth goal more time.`));
+  // Explain how the two linked goals connect for this year.
+  if (t.monthly_savings_target && t.net_worth_target && !isPast) {
+    items.push(insight('🔗', 'How your goals connect',
+      `Saving ${money(t.monthly_savings_target)}/month for the ${m.monthsLeft} ${m.monthsLeft === 1 ? 'month' : 'months'} left, on top of today's ${money(m.netNow)}, is exactly what lands you at ${money(t.net_worth_target)} by December. Change either target and the other follows.`));
   }
 
   el.innerHTML = items.length ? items.join('') : `<div class="empty">Set some targets to see tailored guidance.</div>`;
@@ -828,13 +812,11 @@ function renderTargetInsights(m, year) {
 function dashboardGoalsCard() {
   const year = new Date().getFullYear();
   const t = targetsFor(year);
-  if (!t || !(t.net_worth_target || t.annual_savings_target || t.monthly_savings_target)) return '';
+  if (!t || !(t.net_worth_target || t.monthly_savings_target)) return '';
   const m = targetMetrics(year);
   const rows = [];
   if (t.net_worth_target)
     rows.push(miniGoal(`Net worth ${year}`, m.netNow, t.net_worth_target, m.nwPct, m.nwGap <= 0 || m.avgSaved >= m.nwReqMonthly));
-  if (t.annual_savings_target)
-    rows.push(miniGoal(`Saved in ${year}`, m.saved, t.annual_savings_target, m.asPct, m.asRemaining <= 0 || m.avgSaved >= m.asReqMonthly));
   if (t.monthly_savings_target)
     rows.push(miniGoal('Monthly saving', m.avgSaved, t.monthly_savings_target, m.msPct, m.avgSaved >= t.monthly_savings_target));
   return `<div class="card section-gap">
