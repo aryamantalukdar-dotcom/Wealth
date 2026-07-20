@@ -15,6 +15,7 @@ let charts = {}; // active Chart.js instances, destroyed on re-render
 const api = {
   async load() {
     const r = await fetch('/api/data');
+    if (r.status === 401) { window.location = '/login'; return; }
     if (!r.ok) throw new Error('Failed to load data');
     const d = await r.json();
     state.partners = d.partners;
