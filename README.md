@@ -24,6 +24,14 @@ Built with Node + Express + SQLite. All figures are in **GBP (£)**.
     heading based on your average monthly saving
   - **Insights** — emergency-fund buffer, "clear the credit card first",
     saving momentum, cash-vs-investment balance, and time-to-milestone
+  - **Goals progress strip** summarising how you're tracking against this
+    year's targets
+- **Targets tab** — set shared goals for any year and track progress:
+  - Net worth to reach by year end
+  - Total amount to save during the year
+  - Monthly saving target
+  Each goal gets a progress bar plus tailored guidance on the monthly pace
+  needed to hit it, whether you're on track, and how to close any gap.
 - Rename each partner to your actual names.
 - Everything is stored in a shared SQLite database, so whatever one of you
   saves is instantly visible to the other.

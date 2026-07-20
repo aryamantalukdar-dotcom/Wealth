@@ -84,7 +84,8 @@ app.get('/api/data', async (req, res, next) => {
     const entries = (
       await db.execute('SELECT * FROM entries ORDER BY month ASC, partner_id ASC')
     ).rows;
-    res.json({ partners, entries, currency: 'GBP' });
+    const targets = (await db.execute('SELECT * FROM targets ORDER BY year')).rows;
+    res.json({ partners, entries, targets, currency: 'GBP' });
   } catch (e) {
     next(e);
   }
@@ -166,6 +167,42 @@ app.delete('/api/entries/:id', async (req, res, next) => {
     });
     if (info.rowsAffected === 0) return res.status(404).json({ error: 'Entry not found' });
     res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Create or update the household targets for a given year (upsert on year).
+app.post('/api/targets', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const year = Number(b.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ error: 'Invalid year' });
+    }
+    const args = {
+      year,
+      net_worth_target: Math.max(0, num(b.net_worth_target)),
+      annual_savings_target: Math.max(0, num(b.annual_savings_target)),
+      monthly_savings_target: Math.max(0, num(b.monthly_savings_target)),
+      updated_at: new Date().toISOString(),
+    };
+    await db.execute({
+      sql: `INSERT INTO targets
+         (year, net_worth_target, annual_savings_target, monthly_savings_target, updated_at)
+       VALUES
+         (:year, :net_worth_target, :annual_savings_target, :monthly_savings_target, :updated_at)
+       ON CONFLICT(year) DO UPDATE SET
+         net_worth_target       = :net_worth_target,
+         annual_savings_target  = :annual_savings_target,
+         monthly_savings_target = :monthly_savings_target,
+         updated_at             = :updated_at`,
+      args,
+    });
+    const saved = (
+      await db.execute({ sql: 'SELECT * FROM targets WHERE year = ?', args: [year] })
+    ).rows[0];
+    res.json(saved);
   } catch (e) {
     next(e);
   }

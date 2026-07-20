@@ -7,7 +7,9 @@
 const state = {
   partners: [],   // [{id, name}]
   entries: [],    // [{id, partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved}]
+  targets: [],    // [{year, net_worth_target, annual_savings_target, monthly_savings_target}]
   view: 'dashboard',
+  targetYear: new Date().getFullYear(),
 };
 
 let charts = {}; // active Chart.js instances, destroyed on re-render
@@ -20,6 +22,7 @@ const api = {
     const d = await r.json();
     state.partners = d.partners;
     state.entries = d.entries;
+    state.targets = d.targets || [];
   },
   async renamePartner(id, name) {
     const r = await fetch(`/api/partners/${id}`, {
@@ -41,6 +44,15 @@ const api = {
   async deleteEntry(id) {
     const r = await fetch(`/api/entries/${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error('Delete failed');
+  },
+  async saveTargets(t) {
+    const r = await fetch('/api/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(t),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
+    return r.json();
   },
 };
 
@@ -111,6 +123,31 @@ function prettyMonth(m) {
     .toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
+// combined net worth right now (latest recorded month), 0 if no data
+function combinedNetNow() {
+  const months = allMonths();
+  return months.length ? combinedNetAt(months[months.length - 1]) : 0;
+}
+
+// targets row for a year, or null
+const targetsFor = (year) => state.targets.find((t) => Number(t.year) === year) || null;
+
+// total combined amount saved during a calendar year (sum of monthly_saved)
+function savedInYear(year) {
+  return state.entries
+    .filter((e) => e.month.startsWith(String(year) + '-'))
+    .reduce((sum, e) => sum + e.monthly_saved, 0);
+}
+
+// months from now (inclusive of the current month) through December of `year`.
+// 0 if that December is already in the past.
+function monthsRemainingInYear(year) {
+  const now = new Date();
+  const nowIdx = now.getFullYear() * 12 + now.getMonth();
+  const endIdx = year * 12 + 11; // December of target year
+  return Math.max(0, endIdx - nowIdx + 1);
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -137,6 +174,7 @@ function render() {
   if (state.view === 'dashboard') renderDashboard();
   else if (state.view === 'p1') renderPartner(1);
   else if (state.view === 'p2') renderPartner(2);
+  else if (state.view === 'targets') renderTargets();
 }
 
 // ---- Dashboard -------------------------------------------------------------
@@ -213,6 +251,8 @@ function renderDashboard() {
         ? `<div class="chart-wrap"><canvas id="trendChart"></canvas></div>`
         : `<div class="empty">No data yet. Head to a partner tab and add your first month.</div>`}
     </div>
+
+    ${dashboardGoalsCard()}
 
     <div class="card section-gap">
       <h3>Insights &amp; how to save more</h3>
@@ -572,10 +612,252 @@ function historyTable(es) {
   </table></div>`;
 }
 
+// ---- Targets view ----------------------------------------------------------
+
+// Compute every progress figure for a year's targets in one place.
+function targetMetrics(year) {
+  const t = targetsFor(year) || {
+    net_worth_target: 0, annual_savings_target: 0, monthly_savings_target: 0,
+  };
+  const netNow = combinedNetNow();
+  const saved = savedInYear(year);
+  const monthsLeft = monthsRemainingInYear(year);
+  const avgSaved = averageCombinedMonthlySaved();
+
+  // net worth
+  const nwGap = t.net_worth_target - netNow;
+  const nwReqMonthly = t.net_worth_target > 0 ? (monthsLeft > 0 ? nwGap / monthsLeft : nwGap) : 0;
+  const nwPct = t.net_worth_target > 0 ? clampPct(netNow / t.net_worth_target * 100) : 0;
+
+  // annual savings
+  const asRemaining = t.annual_savings_target - saved;
+  const asReqMonthly = t.annual_savings_target > 0 ? (monthsLeft > 0 ? asRemaining / monthsLeft : asRemaining) : 0;
+  const asPct = t.annual_savings_target > 0 ? clampPct(saved / t.annual_savings_target * 100) : 0;
+
+  // monthly savings (measured against average monthly saving)
+  const msPct = t.monthly_savings_target > 0 ? clampPct(avgSaved / t.monthly_savings_target * 100) : 0;
+
+  return { t, netNow, saved, monthsLeft, avgSaved, nwGap, nwReqMonthly, nwPct, asRemaining, asReqMonthly, asPct, msPct };
+}
+
+function renderTargets() {
+  const year = state.targetYear;
+  const m = targetMetrics(year);
+  const t = m.t;
+  const hasAny = t.net_worth_target || t.annual_savings_target || t.monthly_savings_target;
+  const isPast = m.monthsLeft === 0;
+
+  appEl.innerHTML = `
+    <div class="targets-head">
+      <div>
+        <h1 class="view-title">Goals &amp; targets</h1>
+        <p class="view-sub">Set shared money goals for the year and track how you're doing against them.</p>
+      </div>
+      <div class="year-switch">
+        <button class="btn-ghost btn-small" id="yearPrev" aria-label="Previous year">‹</button>
+        <span class="year-label">${year}</span>
+        <button class="btn-ghost btn-small" id="yearNext" aria-label="Next year">›</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Set targets for ${year}</h3>
+      <form id="targetForm">
+        <div class="form-grid form-grid-3">
+          <div class="field">
+            <label for="t_networth">Net worth by end of ${year} <span class="hint">£ combined</span></label>
+            <input type="number" step="100" id="t_networth" placeholder="0" value="${t.net_worth_target || ''}" />
+          </div>
+          <div class="field">
+            <label for="t_annual">Total to save during ${year} <span class="hint">£ combined</span></label>
+            <input type="number" step="100" id="t_annual" placeholder="0" value="${t.annual_savings_target || ''}" />
+          </div>
+          <div class="field">
+            <label for="t_monthly">Monthly saving target <span class="hint">£ combined / month</span></label>
+            <input type="number" step="50" id="t_monthly" placeholder="0" value="${t.monthly_savings_target || ''}" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Save targets</button>
+          <span class="hint" style="color:var(--muted);font-size:13px">Tip: monthly target × 12 is a good starting point for the annual goal.</span>
+        </div>
+      </form>
+    </div>
+
+    ${hasAny ? `
+      <div class="grid cols-3 section-gap">
+        ${nwCard(m, year, isPast)}
+        ${asCard(m, year, isPast)}
+        ${msCard(m, year)}
+      </div>
+      <div class="card section-gap">
+        <h3>How to hit your ${year} goals</h3>
+        <div id="targetInsights"></div>
+      </div>
+    ` : `<div class="card section-gap"><div class="empty">Set a target above to start tracking your progress.</div></div>`}
+  `;
+
+  const clampYear = (y) => Math.min(new Date().getFullYear() + 10, Math.max(new Date().getFullYear() - 5, y));
+  document.getElementById('yearPrev').addEventListener('click', () => { state.targetYear = clampYear(year - 1); render(); });
+  document.getElementById('yearNext').addEventListener('click', () => { state.targetYear = clampYear(year + 1); render(); });
+
+  document.getElementById('targetForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try {
+      await api.saveTargets({
+        year,
+        net_worth_target: getVal('t_networth'),
+        annual_savings_target: getVal('t_annual'),
+        monthly_savings_target: getVal('t_monthly'),
+      });
+      await api.load();
+      render();
+      toast('Targets saved ✓', 'good');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+
+  if (hasAny) renderTargetInsights(m, year);
+}
+
+function targetCard(title, big, sub, pct, ok, status) {
+  return `<div class="card target-card">
+    <h3>${title}</h3>
+    <div class="target-num">${big} <span class="target-sub">${sub}</span></div>
+    ${progressBar(pct, ok)}
+    <div class="target-status ${ok ? 'pos' : 'warnc'}">${Math.round(pct)}% · ${status}</div>
+  </div>`;
+}
+
+function placeholderCard(title, msg) {
+  return `<div class="card target-card"><h3>${title}</h3><div class="empty" style="padding:22px 0">${msg}</div></div>`;
+}
+
+function nwCard(m, year, isPast) {
+  const t = m.t;
+  if (!t.net_worth_target) return placeholderCard('Net worth goal', `No net-worth target set for ${year}.`);
+  const done = m.nwGap <= 0;
+  const ok = done || m.avgSaved >= m.nwReqMonthly;
+  const status = done
+    ? `reached ${money(m.netNow)}`
+    : isPast
+      ? `year ended ${money(Math.abs(m.nwGap))} short`
+      : `${money(m.nwGap)} to go · need ~${money(m.nwReqMonthly)}/mo`;
+  return targetCard(`Net worth by Dec ${year}`, money(m.netNow), 'of ' + money(t.net_worth_target), m.nwPct, ok, status);
+}
+
+function asCard(m, year, isPast) {
+  const t = m.t;
+  if (!t.annual_savings_target) return placeholderCard('Annual savings goal', `No annual savings target set for ${year}.`);
+  const done = m.asRemaining <= 0;
+  const ok = done || m.avgSaved >= m.asReqMonthly;
+  const status = done
+    ? `goal hit 🎉`
+    : isPast
+      ? `year ended ${money(Math.abs(m.asRemaining))} short`
+      : `${money(m.asRemaining)} left · need ~${money(m.asReqMonthly)}/mo`;
+  return targetCard(`Saved in ${year}`, money(m.saved), 'of ' + money(t.annual_savings_target), m.asPct, ok, status);
+}
+
+function msCard(m, year) {
+  const t = m.t;
+  if (!t.monthly_savings_target) return placeholderCard('Monthly savings goal', 'No monthly target set.');
+  const ok = m.avgSaved >= t.monthly_savings_target;
+  const status = ok ? `beating target by ${money(m.avgSaved - t.monthly_savings_target)}/mo`
+                    : `${money(t.monthly_savings_target - m.avgSaved)}/mo short`;
+  return targetCard('Monthly saving (avg)', money(m.avgSaved), 'of ' + money(t.monthly_savings_target) + '/mo', m.msPct, ok, status);
+}
+
+function renderTargetInsights(m, year) {
+  const el = document.getElementById('targetInsights');
+  if (!el) return;
+  const t = m.t;
+  const isPast = m.monthsLeft === 0;
+  const items = [];
+
+  if (t.net_worth_target) {
+    if (m.nwGap <= 0) {
+      items.push(insight('🎯', 'Net-worth goal reached',
+        `You're at ${money(m.netNow)}, already past your ${money(t.net_worth_target)} target for ${year}. Time to set a bolder one.`));
+    } else if (isPast) {
+      items.push(insight('📅', 'Net-worth window closed',
+        `${year} has ended — you finished ${money(m.nwGap)} short of ${money(t.net_worth_target)}. Roll the gap into next year's goal.`));
+    } else if (m.avgSaved >= m.nwReqMonthly) {
+      items.push(insight('✅', 'On track for your net-worth goal',
+        `You need about ${money(m.nwReqMonthly)}/month over the ${m.monthsLeft} months left, and you're saving ${money(m.avgSaved)}. Any investment growth is a bonus on top.`));
+    } else {
+      items.push(insight('⚠️', 'Behind on net-worth goal',
+        `Reaching ${money(t.net_worth_target)} needs ~${money(m.nwReqMonthly)}/month for ${m.monthsLeft} months, but you're saving ${money(m.avgSaved)} — a ${money(m.nwReqMonthly - m.avgSaved)}/month gap. Investment growth can close part of it; the rest means saving more or extending the deadline.`));
+    }
+  }
+
+  if (t.annual_savings_target) {
+    if (m.asRemaining <= 0) {
+      items.push(insight('🏆', 'Annual savings goal hit',
+        `You've put away ${money(m.saved)} this year — goal smashed. Consider redirecting new savings toward investments or clearing debt.`));
+    } else if (isPast) {
+      items.push(insight('📅', 'Savings year closed',
+        `You saved ${money(m.saved)} of the ${money(t.annual_savings_target)} target. Carry the shortfall into next year's plan.`));
+    } else {
+      const ok = m.avgSaved >= m.asReqMonthly;
+      items.push(insight(ok ? '✅' : '⚠️', ok ? 'Savings pace looks good' : 'Pick up the savings pace',
+        `You've banked ${money(m.saved)} of ${money(t.annual_savings_target)}. To finish you need ${money(m.asReqMonthly)}/month for the ${m.monthsLeft} months left${ok ? " — you're ahead of that." : `, versus ${money(m.avgSaved)}/mo now.`}`));
+    }
+  }
+
+  if (t.monthly_savings_target) {
+    const diff = m.avgSaved - t.monthly_savings_target;
+    if (diff >= 0) {
+      items.push(insight('💪', 'Beating your monthly target',
+        `Your average ${money(m.avgSaved)}/month is ${money(diff)} above target. Funnel the extra at your credit card first, then investments.`));
+    } else {
+      items.push(insight('🔧', 'Closing the monthly gap',
+        `You're ${money(-diff)}/month below your ${money(t.monthly_savings_target)} target. Easy wins: a payday standing order, trimming one recurring subscription, or sending any windfall straight to savings.`));
+    }
+  }
+
+  // Sanity-check: does the monthly target actually support the net-worth goal?
+  if (t.monthly_savings_target && t.net_worth_target && !isPast && m.nwReqMonthly > t.monthly_savings_target * 1.05) {
+    items.push(insight('🧮', 'Your goals don’t quite line up',
+      `Your net-worth goal implies ~${money(m.nwReqMonthly)}/month, but your monthly target is only ${money(t.monthly_savings_target)}. Raise the monthly target or give the net-worth goal more time.`));
+  }
+
+  el.innerHTML = items.length ? items.join('') : `<div class="empty">Set some targets to see tailored guidance.</div>`;
+}
+
+// Compact goals strip shown on the dashboard (current year only).
+function dashboardGoalsCard() {
+  const year = new Date().getFullYear();
+  const t = targetsFor(year);
+  if (!t || !(t.net_worth_target || t.annual_savings_target || t.monthly_savings_target)) return '';
+  const m = targetMetrics(year);
+  const rows = [];
+  if (t.net_worth_target)
+    rows.push(miniGoal(`Net worth ${year}`, m.netNow, t.net_worth_target, m.nwPct, m.nwGap <= 0 || m.avgSaved >= m.nwReqMonthly));
+  if (t.annual_savings_target)
+    rows.push(miniGoal(`Saved in ${year}`, m.saved, t.annual_savings_target, m.asPct, m.asRemaining <= 0 || m.avgSaved >= m.asReqMonthly));
+  if (t.monthly_savings_target)
+    rows.push(miniGoal('Monthly saving', m.avgSaved, t.monthly_savings_target, m.msPct, m.avgSaved >= t.monthly_savings_target));
+  return `<div class="card section-gap">
+    <h3>Goals progress · ${year}</h3>
+    ${rows.join('')}
+    <div style="margin-top:10px"><a class="goals-link" href="#targets">Manage targets →</a></div>
+  </div>`;
+}
+
+function miniGoal(label, current, target, pct, ok) {
+  return `<div class="mini-goal">
+    <div class="mini-goal-top"><span>${label}</span><span class="${ok ? 'pos' : 'warnc'}">${money(current)} / ${money(target)}</span></div>
+    ${progressBar(pct, ok)}
+  </div>`;
+}
+
 // ---------------------------------------------------------------------------
 // small utils
 // ---------------------------------------------------------------------------
 
+const clampPct = (v) => Math.max(0, Math.min(100, v));
+const progressBar = (pct, ok) =>
+  `<div class="pbar"><div class="pbar-fill ${ok ? 'ok' : 'behind'}" style="width:${Math.max(2, clampPct(pct))}%"></div></div>`;
 const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
 const getVal = (id) => { const el = document.getElementById(id); return el ? Number(el.value || 0) : 0; };
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -605,7 +887,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 
 window.addEventListener('hashchange', () => {
   const v = location.hash.replace('#', '');
-  if (['dashboard', 'p1', 'p2'].includes(v) && v !== state.view) {
+  if (['dashboard', 'p1', 'p2', 'targets'].includes(v) && v !== state.view) {
     state.view = v;
     render();
   }
@@ -615,7 +897,7 @@ window.addEventListener('hashchange', () => {
   try {
     await api.load();
     const v = location.hash.replace('#', '');
-    if (['dashboard', 'p1', 'p2'].includes(v)) state.view = v;
+    if (['dashboard', 'p1', 'p2', 'targets'].includes(v)) state.view = v;
     render();
   } catch (e) {
     appEl.innerHTML = `<div class="empty">Couldn't load data: ${escapeHtml(e.message)}</div>`;

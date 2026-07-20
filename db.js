@@ -42,6 +42,16 @@ async function init() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS targets (
+      year                   INTEGER PRIMARY KEY,
+      net_worth_target       REAL NOT NULL DEFAULT 0,   -- combined net worth to reach by year end
+      annual_savings_target  REAL NOT NULL DEFAULT 0,   -- total to save across the year (combined)
+      monthly_savings_target REAL NOT NULL DEFAULT 0,   -- combined amount to save each month
+      updated_at             TEXT NOT NULL
+    );
+  `);
+
   // Seed the two partners on first run.
   const res = await db.execute('SELECT COUNT(*) AS n FROM partners');
   if (Number(res.rows[0].n) === 0) {
