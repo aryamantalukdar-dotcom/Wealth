@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Our Wealth Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💷</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">💷</span>
+      <span class="brand-name">Our Wealth</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="p1">Partner 1</button>
+      <button class="tab" data-view="p2">Partner 2</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <div class="loading">Loading…</div>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
