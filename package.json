@@ -1,0 +1,23 @@
+{
+  "name": "wealth",
+  "version": "1.0.0",
+  "description": "A shared web-based wealth dashboard for two people",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "wealth",
+    "finance",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "express": "^5.2.1"
+  }
+}
