@@ -3,12 +3,11 @@
   "version": "1.0.0",
   "description": "A shared web-based wealth dashboard for two people",
   "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "http://local_proxy@127.0.0.1:41729/git/aryamantalukdar-dotcom/Wealth"
   },
   "keywords": [
     "wealth",
@@ -18,8 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
-    "chart.js": "^4.4.3",
+    "@libsql/client": "^0.14.0",
     "express": "^5.2.1"
   }
 }
