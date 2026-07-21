@@ -105,12 +105,16 @@ const entryNet = (e) =>
 
 const partnerName = (id) => (state.partners.find((p) => p.id === id) || {}).name || `Partner ${id}`;
 
-// Reads each partner's identity colour straight from CSS (--p1/--p2 in styles.css) so
-// Chart.js — which needs literal colour strings, not CSS vars — always matches the tab colour.
-const partnerColor = (id) => {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(id === 1 ? '--p1' : '--p2').trim();
-  return v || (id === 1 ? '#2563eb' : '#ea580c');
-};
+// Reads each partner's identity colours straight from CSS (--p1/--p1-2 etc. in
+// styles.css) so Chart.js — which needs literal colour strings, not CSS vars —
+// always matches the tab gradients.
+const cssVar = (name, fallback) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+const partnerColor = (id) => cssVar(id === 1 ? '--p1' : '--p2', id === 1 ? '#0d9488' : '#9333ea');
+const partnerGrad = (id) => [
+  partnerColor(id),
+  cssVar(id === 1 ? '--p1-2' : '--p2-2', id === 1 ? '#06b6d4' : '#c026d3'),
+];
 
 // entries for one partner, oldest -> newest
 const partnerEntries = (id) =>
@@ -307,10 +311,10 @@ function renderDashboard() {
     </div>
 
     <div class="grid cols-4 section-gap">
-      ${statCard('Liquid (cash + accounts)', money(liquid))}
-      ${statCard('Investments', money(totals.investments))}
-      ${statCard('Credit card debt', money(totals.credit_card), totals.credit_card > 0 ? 'neg' : '')}
-      ${statCard('Saved this month', money(totals.monthly_saved))}
+      ${statCard('Liquid (cash + accounts)', money(liquid), '', '💷')}
+      ${statCard('Investments', money(totals.investments), '', '📈')}
+      ${statCard('Credit card debt', money(totals.credit_card), totals.credit_card > 0 ? 'neg' : '', '💳')}
+      ${statCard('Saved this month', money(totals.monthly_saved), '', '🐷')}
     </div>
 
     <div class="grid cols-2 section-gap">
@@ -346,7 +350,13 @@ function renderDashboard() {
   renderInsights(totals, avgSaved, combinedNow, delta);
 
   document.getElementById('exportBtn').addEventListener('click', exportCsv);
+
+  // count the headline number up from its previous value
+  animateMoney(appEl.querySelector('.hero .value'), lastHeroValue ?? 0, combinedNow);
+  lastHeroValue = combinedNow;
 }
+
+let lastHeroValue = null;
 
 // Download every recorded month as a CSV — an easy off-site backup.
 function exportCsv() {
@@ -368,8 +378,11 @@ function exportCsv() {
   toast('CSV downloaded ✓', 'good');
 }
 
-function statCard(label, value, cls = '') {
-  return `<div class="card stat"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
+function statCard(label, value, cls = '', icon = '') {
+  return `<div class="card stat">
+    ${icon ? `<div class="stat-ico">${icon}</div>` : ''}
+    <div class="label">${label}</div><div class="value ${cls}">${value}</div>
+  </div>`;
 }
 
 function renderBreakdown(totals) {
@@ -388,13 +401,38 @@ function renderBreakdown(totals) {
     </div>`;
 }
 
+// Draws the combined total in the doughnut's hollow centre.
+const centreTotalPlugin = {
+  id: 'centreTotal',
+  afterDraw(chart) {
+    const total = chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+    const { ctx } = chart;
+    // anchor to the arc's own centre so the label always sits in the hollow,
+    // even mid-resize
+    const arc = chart.getDatasetMeta(0).data[0];
+    if (!arc) return;
+    const cx = arc.x;
+    const cy = arc.y;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#5c6280';
+    ctx.font = '600 12px -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('Together', cx, cy - 14);
+    ctx.fillStyle = '#191d2e';
+    ctx.font = '800 22px -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(money(total), cx, cy + 8);
+    ctx.restore();
+  },
+};
+
 function renderSplitChart() {
   const data = state.partners.map((p) => {
     const e = latestEntry(p.id);
     return e ? Math.max(0, entryNet(e)) : 0;
   });
   const legend = document.getElementById('splitLegend');
-  const colors = [partnerColor(1), partnerColor(2)];
+  const grads = [partnerGrad(1), partnerGrad(2)];
 
   if (data.every((d) => d === 0)) {
     document.getElementById('splitChart').parentElement.innerHTML =
@@ -403,24 +441,45 @@ function renderSplitChart() {
     return;
   }
 
+  // Canvas gradients per segment, matching each partner's tab gradient.
+  const arcGradient = (ctx2) => {
+    const { chart, dataIndex } = ctx2;
+    const area = chart.chartArea;
+    const [from, to] = grads[dataIndex] || grads[0];
+    if (!area) return from;
+    const g = chart.ctx.createLinearGradient(area.left, area.top, area.right, area.bottom);
+    g.addColorStop(0, from);
+    g.addColorStop(1, to);
+    return g;
+  };
+
   charts.split = new Chart(document.getElementById('splitChart'), {
     type: 'doughnut',
     data: {
       labels: state.partners.map((p) => p.name),
-      datasets: [{ data, backgroundColor: colors, borderColor: '#ffffff', borderWidth: 3 }],
+      datasets: [{
+        data,
+        backgroundColor: arcGradient,
+        borderWidth: 0,
+        borderRadius: 12,
+        spacing: 5,
+        hoverOffset: 8,
+      }],
     },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      layout: { padding: 8 },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${money(c.parsed)}` } },
       },
     },
+    plugins: [centreTotalPlugin],
   });
 
   const total = data.reduce((a, b) => a + b, 0) || 1;
   legend.innerHTML = state.partners.map((p, i) =>
-    `<span><span class="dot" style="background:${colors[i]}"></span>${p.name} — ${money(data[i])} (${Math.round(data[i] / total * 100)}%)</span>`
+    `<span><span class="dot" style="background:linear-gradient(135deg, ${grads[i][0]}, ${grads[i][1]})"></span>${p.name} — ${money(data[i])} (${Math.round(data[i] / total * 100)}%)</span>`
   ).join('');
 }
 
@@ -449,26 +508,37 @@ function renderTrendChart(months, avgSaved) {
   // pad historical series with nulls for projection months
   const pad = (arr) => arr.concat(new Array(projLabels.length).fill(null));
 
+  // Soft vertical fade under the Combined line (indigo, the dashboard's colour).
+  const combinedFill = (ctx2) => {
+    const { chart } = ctx2;
+    const area = chart.chartArea;
+    if (!area) return 'rgba(79,70,229,.12)';
+    const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+    g.addColorStop(0, 'rgba(79,70,229,.22)');
+    g.addColorStop(1, 'rgba(79,70,229,0)');
+    return g;
+  };
+
   charts.trend = new Chart(document.getElementById('trendChart'), {
     type: 'line',
     data: {
       labels: allLabels,
       datasets: [
         {
-          label: 'Combined', data: pad(combined), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.14)',
-          borderWidth: 3, fill: true, tension: .3, pointRadius: 3,
+          label: 'Combined', data: pad(combined), borderColor: '#4f46e5', backgroundColor: combinedFill,
+          borderWidth: 3, fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#4f46e5',
         },
         {
-          label: partnerName(1), data: pad(p1), borderColor: partnerColor(1), borderWidth: 2, tension: .3,
+          label: partnerName(1), data: pad(p1), borderColor: partnerColor(1), borderWidth: 2, tension: .35,
           pointRadius: 2, spanGaps: true,
         },
         {
-          label: partnerName(2), data: pad(p2), borderColor: partnerColor(2), borderWidth: 2, tension: .3,
+          label: partnerName(2), data: pad(p2), borderColor: partnerColor(2), borderWidth: 2, tension: .35,
           pointRadius: 2, spanGaps: true,
         },
         {
-          label: 'Projected', data: projData, borderColor: '#0d9488', borderDash: [6, 5],
-          borderWidth: 2, tension: .3, pointRadius: 0, fill: false,
+          label: 'Projected', data: projData, borderColor: '#7c3aed', borderDash: [6, 5],
+          borderWidth: 2, tension: .35, pointRadius: 0, fill: false,
         },
       ],
     },
@@ -581,10 +651,10 @@ function renderPartner(id) {
     <p class="view-sub">Update your figures each month. The dashboard combines them automatically.</p>
 
     <div class="grid cols-4">
-      ${statCard('Your net worth', money(net), net >= 0 ? '' : 'neg')}
-      ${statCard('Liquid', money(latest ? latest.current_account + latest.cash_savings : 0))}
-      ${statCard('Investments', money(latest ? latest.investments : 0))}
-      ${statCard('Card debt', money(latest ? latest.credit_card : 0), latest && latest.credit_card > 0 ? 'neg' : '')}
+      ${statCard('Your net worth', money(net), net >= 0 ? '' : 'neg', '💰')}
+      ${statCard('Liquid', money(latest ? latest.current_account + latest.cash_savings : 0), '', '💷')}
+      ${statCard('Investments', money(latest ? latest.investments : 0), '', '📈')}
+      ${statCard('Card debt', money(latest ? latest.credit_card : 0), latest && latest.credit_card > 0 ? 'neg' : '', '💳')}
     </div>
 
     <div class="card section-gap">
@@ -880,6 +950,15 @@ function renderTargets() {
   });
 
   if (hasAny) renderTargetInsights(m, year);
+
+  // a goal reached deserves a moment
+  const goalHit =
+    (t.net_worth_target > 0 && m.nwGap <= 0) ||
+    (t.monthly_savings_target > 0 && m.avgSaved >= t.monthly_savings_target);
+  if (hasAny && goalHit && !celebrated.has(year)) {
+    celebrated.add(year);
+    celebrate();
+  }
 }
 
 function targetCard(title, big, sub, pct, ok, status) {
@@ -988,6 +1067,44 @@ function miniGoal(label, current, target, pct, ok) {
 // ---------------------------------------------------------------------------
 // small utils
 // ---------------------------------------------------------------------------
+
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Counts a money figure up (or down) to its new value — the little bit of
+// theatre that makes opening the dashboard feel rewarding.
+function animateMoney(el, from, to) {
+  if (!el) return;
+  if (reducedMotion || from === to) { el.textContent = money(to); return; }
+  const start = performance.now();
+  const dur = 750;
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / dur);
+    el.textContent = money(from + (to - from) * ease(t));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Emoji burst for when a goal is reached. Once per year per session.
+const celebrated = new Set();
+function celebrate() {
+  if (reducedMotion) return;
+  const host = document.createElement('div');
+  host.className = 'confetti';
+  const glyphs = ['🎉', '✨', '💷', '🎊', '⭐'];
+  for (let i = 0; i < 26; i++) {
+    const s = document.createElement('span');
+    s.textContent = glyphs[i % glyphs.length];
+    s.style.left = (Math.random() * 100).toFixed(1) + 'vw';
+    s.style.fontSize = Math.round(14 + Math.random() * 14) + 'px';
+    s.style.setProperty('--dur', (1.8 + Math.random() * 1.6).toFixed(2) + 's');
+    s.style.setProperty('--delay', (Math.random() * 0.8).toFixed(2) + 's');
+    host.appendChild(s);
+  }
+  document.body.appendChild(host);
+  setTimeout(() => host.remove(), 4200);
+}
 
 const clampPct = (v) => Math.max(0, Math.min(100, v));
 const progressBar = (pct, ok) =>
