@@ -82,6 +82,13 @@ const entryNet = (e) =>
 
 const partnerName = (id) => (state.partners.find((p) => p.id === id) || {}).name || `Partner ${id}`;
 
+// Reads each partner's identity colour straight from CSS (--p1/--p2 in styles.css) so
+// Chart.js — which needs literal colour strings, not CSS vars — always matches the tab colour.
+const partnerColor = (id) => {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(id === 1 ? '--p1' : '--p2').trim();
+  return v || (id === 1 ? '#2563eb' : '#ea580c');
+};
+
 // entries for one partner, oldest -> newest
 const partnerEntries = (id) =>
   state.entries.filter((e) => e.partner_id === id).sort((a, b) => a.month.localeCompare(b.month));
@@ -288,7 +295,7 @@ function renderSplitChart() {
     return e ? Math.max(0, entryNet(e)) : 0;
   });
   const legend = document.getElementById('splitLegend');
-  const colors = ['#3b82f6', '#f97316'];
+  const colors = [partnerColor(1), partnerColor(2)];
 
   if (data.every((d) => d === 0)) {
     document.getElementById('splitChart').parentElement.innerHTML =
@@ -353,11 +360,11 @@ function renderTrendChart(months, avgSaved) {
           borderWidth: 3, fill: true, tension: .3, pointRadius: 3,
         },
         {
-          label: partnerName(1), data: pad(p1), borderColor: '#3b82f6', borderWidth: 2, tension: .3,
+          label: partnerName(1), data: pad(p1), borderColor: partnerColor(1), borderWidth: 2, tension: .3,
           pointRadius: 2, spanGaps: true,
         },
         {
-          label: partnerName(2), data: pad(p2), borderColor: '#f97316', borderWidth: 2, tension: .3,
+          label: partnerName(2), data: pad(p2), borderColor: partnerColor(2), borderWidth: 2, tension: .3,
           pointRadius: 2, spanGaps: true,
         },
         {
