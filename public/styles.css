@@ -369,6 +369,12 @@ button:active { transform: scale(.97); }
 .target-card .target-num { font-size: 24px; font-weight: 800; margin-bottom: 12px; }
 .target-card .target-sub { font-size: 13px; font-weight: 600; color: var(--muted); }
 .target-card .target-status { font-size: 13px; margin-top: 10px; font-weight: 600; }
+/* A "behind" bar on the Targets page uses the tab's fuchsia→pink theme
+   instead of amber; on-track bars stay green. */
+.target-card .pbar-fill.behind {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--accent-soft);
+}
 
 .mini-goal { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .mini-goal:last-of-type { border-bottom: 0; }
