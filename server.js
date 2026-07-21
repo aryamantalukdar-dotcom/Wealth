@@ -56,9 +56,12 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Gate everything else.
+// Gate everything else. The PWA manifest and icons stay public: browsers fetch
+// the manifest without cookies, so gating them would silently break
+// add-to-home-screen installability (and they contain nothing sensitive).
 app.use((req, res, next) => {
   if (isAuthed(req)) return next();
+  if (req.path === '/manifest.webmanifest' || req.path.startsWith('/icons/')) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
   return res.redirect('/login');
 });
@@ -213,6 +216,9 @@ app.get('/*splat', (req, res) => {
 
 // Error handler.
 app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Server error' });
 });

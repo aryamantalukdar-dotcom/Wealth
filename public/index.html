@@ -4,8 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f6fc" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Our Wealth" />
   <title>Our Wealth Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💷</text></svg>" />
 </head>
 <body>
@@ -20,11 +26,27 @@
       <button class="tab" data-view="p2">Partner 2</button>
       <button class="tab" data-view="targets">Targets</button>
     </nav>
+    <button class="btn-ghost btn-small logout-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">Sign out</button>
   </header>
 
   <main id="app">
-    <div class="loading">Loading…</div>
+    <div class="loading" id="loadingMsg">Loading…</div>
   </main>
+
+  <nav class="bottomnav" id="bottomnav" aria-label="Sections">
+    <button class="tab bnav" data-view="dashboard">
+      <span class="bnav-ico">🏠</span><span class="bnav-label">Home</span>
+    </button>
+    <button class="tab bnav" data-view="p1">
+      <span class="bnav-ico avatar av1" data-avatar="p1">1</span><span class="bnav-label" data-label="p1">Partner 1</span>
+    </button>
+    <button class="tab bnav" data-view="p2">
+      <span class="bnav-ico avatar av2" data-avatar="p2">2</span><span class="bnav-label" data-label="p2">Partner 2</span>
+    </button>
+    <button class="tab bnav" data-view="targets">
+      <span class="bnav-ico">🎯</span><span class="bnav-label">Targets</span>
+    </button>
+  </nav>
 
   <div id="toast" class="toast" hidden></div>
 

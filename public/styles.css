@@ -30,6 +30,8 @@ body[data-view="p2"] { --accent: #ea580c; --accent-2: #d97706; --accent-soft: rg
 body[data-view="targets"] { --accent: #a21caf; --accent-2: #db2777; --accent-soft: rgba(162, 28, 175, 0.14); }
 
 * { box-sizing: border-box; }
+/* The hidden attribute must always win, even over classes that set display. */
+[hidden] { display: none !important; }
 html { background: var(--bg); }
 html, body { scrollbar-color: rgba(30, 41, 59, 0.22) transparent; scrollbar-width: thin; }
 
@@ -365,3 +367,96 @@ button:active { transform: scale(.97); }
 .mini-goal-top span:first-child { color: var(--muted); font-weight: 600; }
 .goals-link { color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 700; }
 .goals-link:hover { text-decoration: underline; }
+
+/* ---- topbar extras ---- */
+.logout-btn { flex-shrink: 0; }
+
+/* ---- bottom nav (phones) ---- */
+.bottomnav {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 30;
+  padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 24px rgba(30, 41, 59, 0.08);
+}
+.bnav {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px 4px;
+  min-height: 52px;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.bnav:hover { background: rgba(30, 41, 59, 0.05); color: var(--muted); }
+.bnav .bnav-ico { font-size: 21px; line-height: 1; filter: grayscale(70%) opacity(.75); transition: filter .2s ease; }
+.bnav .bnav-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bnav.active { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+.bnav.active .bnav-ico { filter: none; }
+/* keep per-tab gradient off bottom-nav buttons — they use tinted pills instead */
+.bnav.active[data-view="dashboard"], .bnav.active[data-view="p1"],
+.bnav.active[data-view="p2"], .bnav.active[data-view="targets"] { background: var(--accent-soft); }
+.bnav.active[data-view="p1"] { color: var(--p1); }
+.bnav.active[data-view="p2"] { color: var(--p2); }
+
+.avatar {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: #fff;
+  filter: none !important;
+}
+.avatar.av1 { background: linear-gradient(135deg, #2563eb, #0891b2); }
+.avatar.av2 { background: linear-gradient(135deg, #ea580c, #d97706); }
+
+@media (max-width: 719px) {
+  .topbar .tabs { display: none; }
+  .bottomnav { display: flex; }
+  main { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+
+/* ---- partner header / inline rename ---- */
+.partner-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.partner-head .view-title { margin: 0; }
+.rename-btn { padding: 6px 12px; min-height: 32px; font-size: 12px; }
+.name-edit { display: flex; gap: 10px; align-items: center; margin: 10px 0 14px; flex-wrap: wrap; }
+.name-edit input { flex: 1; min-width: 160px; max-width: 280px; }
+
+/* ---- month status chip on the entry form ---- */
+.month-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 6px; padding: 5px 11px; border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 600;
+}
+.month-note.update { background: rgba(180, 83, 9, 0.12); color: var(--warn); }
+.month-note.new { background: rgba(4, 120, 87, 0.10); color: var(--good); }
+
+/* ---- onboarding / welcome ---- */
+.welcome-steps { display: grid; gap: 14px; margin: 18px 0 22px; }
+.welcome-step { display: flex; gap: 14px; align-items: flex-start; }
+.welcome-step .num {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff; font-weight: 800; font-size: 14px;
+  box-shadow: 0 4px 12px var(--accent-soft);
+}
+.welcome-step .body { font-size: 14px; padding-top: 4px; }
+.welcome-step .body strong { display: block; margin-bottom: 2px; }
+.welcome-step .body span { color: var(--muted); }
+.welcome-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---- dashboard head row (title + export) ---- */
+.dash-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-head > div:first-child { min-width: 0; }
