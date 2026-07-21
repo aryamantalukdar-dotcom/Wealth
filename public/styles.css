@@ -429,9 +429,12 @@ button:active { transform: scale(.97); }
 .avatar {
   width: 22px; height: 22px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9.5px; font-weight: 700; line-height: 1; color: #fff;
+  font-weight: 700; line-height: 1; color: #fff;
   filter: none !important;
 }
+/* Higher specificity than `.bnav .bnav-ico` (which sets 21px for emoji icons),
+   so the avatar digit/initial stays small and doesn't touch the circle edge. */
+.bnav .bnav-ico.avatar { font-size: 11px; }
 .avatar.av1 { background: linear-gradient(135deg, var(--p1), var(--p1-2)); }
 .avatar.av2 { background: linear-gradient(135deg, var(--p2), var(--p2-2)); }
 
