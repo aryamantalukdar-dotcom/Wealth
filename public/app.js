@@ -70,10 +70,10 @@ const money = (n) => gbp.format(Math.round(n || 0));
 const signed = (n) => (n >= 0 ? '+' : '−') + gbp.format(Math.abs(Math.round(n || 0)));
 
 const CATS = [
-  { key: 'current_account', label: 'Current accounts', color: '#5b8cff', debt: false },
-  { key: 'cash_savings',    label: 'Cash savings',     color: '#34d0a4', debt: false },
-  { key: 'investments',     label: 'Investments',      color: '#a78bfa', debt: false },
-  { key: 'credit_card',     label: 'Credit card debt', color: '#ff6b7d', debt: true  },
+  { key: 'current_account', label: 'Current accounts', color: '#3b82f6', debt: false },
+  { key: 'cash_savings',    label: 'Cash savings',     color: '#10b981', debt: false },
+  { key: 'investments',     label: 'Investments',      color: '#8b5cf6', debt: false },
+  { key: 'credit_card',     label: 'Credit card debt', color: '#f43f5e', debt: true  },
 ];
 
 // net worth of a single entry row
@@ -154,6 +154,9 @@ function destroyCharts() {
 
 function render() {
   destroyCharts();
+
+  // let CSS theme each page with its own accent colour
+  document.body.dataset.view = state.view;
 
   // sync tab highlight + labels
   document.querySelectorAll('.tab').forEach((t) => {
@@ -285,7 +288,7 @@ function renderSplitChart() {
     return e ? Math.max(0, entryNet(e)) : 0;
   });
   const legend = document.getElementById('splitLegend');
-  const colors = ['#5b8cff', '#f5a15b'];
+  const colors = ['#3b82f6', '#f97316'];
 
   if (data.every((d) => d === 0)) {
     document.getElementById('splitChart').parentElement.innerHTML =
@@ -298,7 +301,7 @@ function renderSplitChart() {
     type: 'doughnut',
     data: {
       labels: state.partners.map((p) => p.name),
-      datasets: [{ data, backgroundColor: colors, borderColor: '#1b2438', borderWidth: 3 }],
+      datasets: [{ data, backgroundColor: colors, borderColor: '#ffffff', borderWidth: 3 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
@@ -346,19 +349,19 @@ function renderTrendChart(months, avgSaved) {
       labels: allLabels,
       datasets: [
         {
-          label: 'Combined', data: pad(combined), borderColor: '#34d0a4', backgroundColor: 'rgba(52,208,164,.12)',
+          label: 'Combined', data: pad(combined), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.14)',
           borderWidth: 3, fill: true, tension: .3, pointRadius: 3,
         },
         {
-          label: partnerName(1), data: pad(p1), borderColor: '#5b8cff', borderWidth: 2, tension: .3,
+          label: partnerName(1), data: pad(p1), borderColor: '#3b82f6', borderWidth: 2, tension: .3,
           pointRadius: 2, spanGaps: true,
         },
         {
-          label: partnerName(2), data: pad(p2), borderColor: '#f5a15b', borderWidth: 2, tension: .3,
+          label: partnerName(2), data: pad(p2), borderColor: '#f97316', borderWidth: 2, tension: .3,
           pointRadius: 2, spanGaps: true,
         },
         {
-          label: 'Projected', data: projData, borderColor: '#34d0a4', borderDash: [6, 5],
+          label: 'Projected', data: projData, borderColor: '#0d9488', borderDash: [6, 5],
           borderWidth: 2, tension: .3, pointRadius: 0, fill: false,
         },
       ],
@@ -367,12 +370,12 @@ function renderTrendChart(months, avgSaved) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { labels: { color: '#97a3bd', usePointStyle: true, boxWidth: 8 } },
+        legend: { labels: { color: '#475569', usePointStyle: true, boxWidth: 8 } },
         tooltip: { callbacks: { label: (c) => c.parsed.y == null ? null : `${c.dataset.label}: ${money(c.parsed.y)}` } },
       },
       scales: {
-        x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#97a3bd' } },
-        y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#97a3bd', callback: (v) => money(v) } },
+        x: { grid: { color: 'rgba(15,23,42,.07)' }, ticks: { color: '#64748b' } },
+        y: { grid: { color: 'rgba(15,23,42,.07)' }, ticks: { color: '#64748b', callback: (v) => money(v) } },
       },
     },
   });
