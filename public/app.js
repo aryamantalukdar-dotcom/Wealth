@@ -14,10 +14,26 @@ const state = {
 
 let charts = {}; // active Chart.js instances, destroyed on re-render
 
+// Every API call goes through here so an expired session always lands on the
+// login page instead of surfacing as a cryptic "failed" toast.
+async function apiFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    window.location = '/login';
+    throw new Error('Signed out — redirecting…');
+  }
+  return r;
+}
+
+const jsonOpts = (method, body) => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
 const api = {
   async load() {
-    const r = await fetch('/api/data');
-    if (r.status === 401) { window.location = '/login'; return; }
+    const r = await apiFetch('/api/data');
     if (!r.ok) throw new Error('Failed to load data');
     const d = await r.json();
     state.partners = d.partners;
@@ -25,36 +41,43 @@ const api = {
     state.targets = d.targets || [];
   },
   async renamePartner(id, name) {
-    const r = await fetch(`/api/partners/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
+    const r = await apiFetch(`/api/partners/${id}`, jsonOpts('PUT', { name }));
     if (!r.ok) throw new Error('Rename failed');
   },
   async saveEntry(entry) {
-    const r = await fetch('/api/entries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry),
-    });
+    const r = await apiFetch('/api/entries', jsonOpts('POST', entry));
     if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
     return r.json();
   },
   async deleteEntry(id) {
-    const r = await fetch(`/api/entries/${id}`, { method: 'DELETE' });
+    const r = await apiFetch(`/api/entries/${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error('Delete failed');
   },
   async saveTargets(t) {
-    const r = await fetch('/api/targets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(t),
-    });
+    const r = await apiFetch('/api/targets', jsonOpts('POST', t));
     if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
     return r.json();
   },
+  async logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    window.location = '/login';
+  },
 };
+
+// Disables a button (with a busy label) for the duration of an async action,
+// so double-taps can't double-submit.
+async function withBusy(btn, busyLabel, fn) {
+  if (!btn || btn.disabled) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = busyLabel;
+  try {
+    await fn();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Formatting + finance helpers
@@ -165,19 +188,37 @@ function render() {
   // let CSS theme each page with its own accent colour
   document.body.dataset.view = state.view;
 
-  // sync tab highlight + labels
+  // sync tab highlight (top pills and bottom nav share the .tab class)
   document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('active', t.dataset.view === state.view);
   });
-  const t1 = document.querySelector('.tab[data-view="p1"]');
-  const t2 = document.querySelector('.tab[data-view="p2"]');
+  // top pills carry the full name…
+  const t1 = document.querySelector('#tabs .tab[data-view="p1"]');
+  const t2 = document.querySelector('#tabs .tab[data-view="p2"]');
   if (t1) t1.textContent = partnerName(1);
   if (t2) t2.textContent = partnerName(2);
+  // …the bottom nav gets a short label + initial avatar. Default "Partner N"
+  // names keep their number so the two items stay distinguishable.
+  for (const id of [1, 2]) {
+    const name = partnerName(id);
+    const isDefault = /^partner \d$/i.test(name);
+    const label = document.querySelector(`[data-label="p${id}"]`);
+    const avatar = document.querySelector(`[data-avatar="p${id}"]`);
+    if (label) label.textContent = isDefault ? name : name.split(' ')[0];
+    if (avatar) avatar.textContent = isDefault ? String(id) : (name[0] || String(id)).toUpperCase();
+  }
 
   if (state.view === 'dashboard') renderDashboard();
   else if (state.view === 'p1') renderPartner(1);
   else if (state.view === 'p2') renderPartner(2);
   else if (state.view === 'targets') renderTargets();
+}
+
+// Re-render after a data change without losing the user's place on the page.
+function rerenderInPlace() {
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
 }
 
 // ---- Dashboard -------------------------------------------------------------
@@ -186,7 +227,38 @@ function renderDashboard() {
   const months = allMonths();
   const hasData = state.entries.length > 0;
 
-  const combinedNow = hasData ? combinedNetAt(months[months.length - 1]) : 0;
+  // Fresh start: guide the couple in, rather than showing a wall of £0s.
+  if (!hasData) {
+    appEl.innerHTML = `
+      <h1 class="view-title">Welcome to Our Wealth 👋</h1>
+      <p class="view-sub">A shared picture of your money — here's how to get going.</p>
+      <div class="card">
+        <div class="welcome-steps">
+          <div class="welcome-step"><div class="num">1</div><div class="body">
+            <strong>Open your own tab</strong>
+            <span>You each have a tab — rename it to your own name once you're there.</span>
+          </div></div>
+          <div class="welcome-step"><div class="num">2</div><div class="body">
+            <strong>Add this month's figures</strong>
+            <span>Current account, cash savings, investments, any credit-card balance, and what you saved this month.</span>
+          </div></div>
+          <div class="welcome-step"><div class="num">3</div><div class="body">
+            <strong>Watch it come together</strong>
+            <span>This dashboard combines you both — net worth, charts, trajectory, and tips. Set shared goals under Targets.</span>
+          </div></div>
+        </div>
+        <div class="welcome-actions">
+          <button class="btn-primary" data-goto="p1">Start with ${escapeHtml(partnerName(1))} →</button>
+          <button class="btn-ghost" data-goto="p2">Or ${escapeHtml(partnerName(2))} →</button>
+        </div>
+      </div>
+    `;
+    appEl.querySelectorAll('[data-goto]').forEach((b) =>
+      b.addEventListener('click', () => switchView(b.dataset.goto)));
+    return;
+  }
+
+  const combinedNow = combinedNetAt(months[months.length - 1]);
 
   // combined category totals from each partner's latest entry
   const totals = { current_account: 0, cash_savings: 0, investments: 0, credit_card: 0, monthly_saved: 0 };
@@ -212,8 +284,13 @@ function renderDashboard() {
   const avgSaved = averageCombinedMonthlySaved();
 
   appEl.innerHTML = `
-    <h1 class="view-title">Combined wealth</h1>
-    <p class="view-sub">${partnerName(1)} &amp; ${partnerName(2)} · updated figures roll up here automatically.</p>
+    <div class="dash-head">
+      <div>
+        <h1 class="view-title">Combined wealth</h1>
+        <p class="view-sub">${escapeHtml(partnerName(1))} &amp; ${escapeHtml(partnerName(2))} · updated figures roll up here automatically.</p>
+      </div>
+      <button class="btn-ghost btn-small" id="exportBtn" title="Download all recorded figures as a spreadsheet">⬇ Export CSV</button>
+    </div>
 
     <div class="hero">
       <div>
@@ -267,6 +344,28 @@ function renderDashboard() {
   renderSplitChart();
   if (months.length >= 1) renderTrendChart(months, avgSaved);
   renderInsights(totals, avgSaved, combinedNow, delta);
+
+  document.getElementById('exportBtn').addEventListener('click', exportCsv);
+}
+
+// Download every recorded month as a CSV — an easy off-site backup.
+function exportCsv() {
+  const header = 'Partner,Month,Current account,Cash savings,Investments,Credit card owed,Saved this month,Net worth';
+  const rows = state.entries
+    .slice()
+    .sort((a, b) => a.month.localeCompare(b.month) || a.partner_id - b.partner_id)
+    .map((e) => [
+      `"${partnerName(e.partner_id).replace(/"/g, '""')}"`,
+      e.month, e.current_account, e.cash_savings, e.investments,
+      e.credit_card, e.monthly_saved, entryNet(e),
+    ].join(','));
+  const blob = new Blob([header + '\n' + rows.join('\n') + '\n'], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `our-wealth-${currentMonthStr()}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('CSV downloaded ✓', 'good');
 }
 
 function statCard(label, value, cls = '') {
@@ -471,11 +570,14 @@ function renderPartner(id) {
   const net = latest ? entryNet(latest) : 0;
 
   appEl.innerHTML = `
-    <div class="name-edit">
-      <input id="pname" value="${escapeAttr(partnerName(id))}" aria-label="Your name" />
+    <div class="partner-head">
+      <h1 class="view-title">${escapeHtml(partnerName(id))}'s finances</h1>
+      <button class="btn-ghost rename-btn" id="renameToggle">✏️ Rename</button>
+    </div>
+    <div class="name-edit" id="nameEdit" hidden>
+      <input id="pname" value="${escapeAttr(partnerName(id))}" aria-label="Your name" maxlength="40" />
       <button class="btn-ghost btn-small" id="saveName">Save name</button>
     </div>
-    <h1 class="view-title">${escapeHtml(partnerName(id))}'s finances</h1>
     <p class="view-sub">Update your figures each month. The dashboard combines them automatically.</p>
 
     <div class="grid cols-4">
@@ -492,6 +594,7 @@ function renderPartner(id) {
           <div class="field">
             <label for="f_month">Month</label>
             <input type="month" id="f_month" required value="${currentMonthStr()}" />
+            <span id="monthNote" class="month-note" hidden></span>
           </div>
           <div class="field">
             <label for="f_current">Current account balance <span class="hint">£</span></label>
@@ -516,7 +619,6 @@ function renderPartner(id) {
         </div>
         <div class="form-actions">
           <button type="submit" class="btn-primary">Save month</button>
-          <span class="hint" style="color:var(--muted);font-size:13px">Saving an existing month overwrites it.</span>
         </div>
       </form>
     </div>
@@ -527,54 +629,84 @@ function renderPartner(id) {
     </div>
   `;
 
-  // prefill form with latest figures for convenience
-  if (latest) {
-    setVal('f_current', latest.current_account);
-    setVal('f_cash', latest.cash_savings);
-    setVal('f_invest', latest.investments);
-    setVal('f_card', latest.credit_card);
-  }
+  const monthInput = document.getElementById('f_month');
+  const monthNote = document.getElementById('monthNote');
 
-  // clicking a history row loads it into the form
+  // Fill the form for the selected month: an existing month loads its saved
+  // figures (so saving edits it knowingly); a new month starts from the most
+  // recent entry as a sensible baseline. The chip says which case you're in.
+  const syncFormToMonth = () => {
+    const month = monthInput.value;
+    const existing = partnerEntries(id).find((e) => e.month === month);
+    const src = existing || latest;
+    if (src) {
+      setVal('f_current', src.current_account);
+      setVal('f_cash', src.cash_savings);
+      setVal('f_invest', src.investments);
+      setVal('f_card', src.credit_card);
+      setVal('f_saved', existing ? existing.monthly_saved : '');
+    }
+    if (!month) { monthNote.hidden = true; return; }
+    monthNote.hidden = false;
+    if (existing) {
+      monthNote.className = 'month-note update';
+      monthNote.textContent = `✏️ Editing ${prettyMonth(month)} — saving updates your existing figures`;
+    } else {
+      monthNote.className = 'month-note new';
+      monthNote.textContent = latest
+        ? `➕ New month — pre-filled from ${prettyMonth(latest.month)}, adjust and save`
+        : '➕ Your first month — fill in what you have today';
+    }
+  };
+  syncFormToMonth();
+  monthInput.addEventListener('change', syncFormToMonth);
+
+  // history: load a row into the form / delete a row
   document.querySelectorAll('#histBody tr').forEach((tr) => {
     tr.querySelector('.load-btn')?.addEventListener('click', () => {
       const e = state.entries.find((x) => x.id === Number(tr.dataset.id));
       if (!e) return;
-      document.getElementById('f_month').value = e.month;
-      setVal('f_current', e.current_account);
-      setVal('f_cash', e.cash_savings);
-      setVal('f_invest', e.investments);
-      setVal('f_card', e.credit_card);
-      setVal('f_saved', e.monthly_saved);
+      monthInput.value = e.month;
+      syncFormToMonth();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-    tr.querySelector('.del-btn')?.addEventListener('click', async () => {
+    tr.querySelector('.del-btn')?.addEventListener('click', async (ev) => {
       if (!confirm('Delete this month?')) return;
-      try {
-        await api.deleteEntry(Number(tr.dataset.id));
-        await api.load();
-        render();
-        toast('Month deleted', 'good');
-      } catch (e) { toast(e.message, 'bad'); }
+      await withBusy(ev.currentTarget, '…', async () => {
+        try {
+          await api.deleteEntry(Number(tr.dataset.id));
+          await api.load();
+          rerenderInPlace();
+          toast('Month deleted', 'good');
+        } catch (e) { toast(e.message, 'bad'); }
+      });
     });
   });
 
-  document.getElementById('saveName').addEventListener('click', async () => {
+  // inline rename
+  const nameEdit = document.getElementById('nameEdit');
+  document.getElementById('renameToggle').addEventListener('click', () => {
+    nameEdit.hidden = !nameEdit.hidden;
+    if (!nameEdit.hidden) document.getElementById('pname').focus();
+  });
+  document.getElementById('saveName').addEventListener('click', async (ev) => {
     const name = document.getElementById('pname').value.trim();
     if (!name) return toast('Name cannot be empty', 'bad');
-    try {
-      await api.renamePartner(id, name);
-      await api.load();
-      render();
-      toast('Name saved', 'good');
-    } catch (e) { toast(e.message, 'bad'); }
+    await withBusy(ev.currentTarget, 'Saving…', async () => {
+      try {
+        await api.renamePartner(id, name);
+        await api.load();
+        rerenderInPlace();
+        toast('Name saved', 'good');
+      } catch (e) { toast(e.message, 'bad'); }
+    });
   });
 
   document.getElementById('entryForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const entry = {
       partner_id: id,
-      month: document.getElementById('f_month').value,
+      month: monthInput.value,
       current_account: getVal('f_current'),
       cash_savings: getVal('f_cash'),
       investments: getVal('f_invest'),
@@ -582,17 +714,23 @@ function renderPartner(id) {
       monthly_saved: getVal('f_saved'),
     };
     if (!entry.month) return toast('Pick a month', 'bad');
-    try {
-      await api.saveEntry(entry);
-      await api.load();
-      render();
-      toast('Saved ✓', 'good');
-    } catch (e) { toast(e.message, 'bad'); }
+    await withBusy(ev.submitter || document.querySelector('#entryForm .btn-primary'), 'Saving…', async () => {
+      try {
+        await api.saveEntry(entry);
+        await api.load();
+        rerenderInPlace();
+        toast('Saved ✓', 'good');
+      } catch (e) { toast(e.message, 'bad'); }
+    });
   });
 }
 
 function historyTable(es) {
-  const rows = es.map((e) => `
+  // es is newest-first, so es[i + 1] is the previous (older) month.
+  const rows = es.map((e, i) => {
+    const older = es[i + 1];
+    const delta = older ? entryNet(e) - entryNet(older) : null;
+    return `
     <tr data-id="${e.id}">
       <td>${prettyMonth(e.month)}</td>
       <td>${money(e.current_account)}</td>
@@ -601,15 +739,17 @@ function historyTable(es) {
       <td class="${e.credit_card > 0 ? 'neg' : ''}">${money(e.credit_card)}</td>
       <td>${money(e.monthly_saved)}</td>
       <td class="${entryNet(e) >= 0 ? '' : 'neg'}"><strong>${money(entryNet(e))}</strong></td>
+      <td class="${delta === null ? '' : delta >= 0 ? 'pos' : 'neg'}">${delta === null ? '—' : signed(delta)}</td>
       <td class="row-actions">
         <button class="btn-ghost btn-small load-btn">Edit</button>
-        <button class="btn-danger btn-small del-btn">✕</button>
+        <button class="btn-danger btn-small del-btn" aria-label="Delete month">✕</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   return `<div style="overflow-x:auto"><table>
     <thead><tr>
       <th>Month</th><th>Current a/c</th><th>Cash</th><th>Investments</th>
-      <th>Card debt</th><th>Saved</th><th>Net worth</th><th></th>
+      <th>Card debt</th><th>Saved</th><th>Net worth</th><th>Change</th><th></th>
     </tr></thead>
     <tbody id="histBody">${rows}</tbody>
   </table></div>`;
@@ -725,16 +865,18 @@ function renderTargets() {
 
   document.getElementById('targetForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    try {
-      await api.saveTargets({
-        year,
-        net_worth_target: getVal('t_networth'),
-        monthly_savings_target: getVal('t_monthly'),
-      });
-      await api.load();
-      render();
-      toast('Targets saved ✓', 'good');
-    } catch (e) { toast(e.message, 'bad'); }
+    await withBusy(ev.submitter || document.querySelector('#targetForm .btn-primary'), 'Saving…', async () => {
+      try {
+        await api.saveTargets({
+          year,
+          net_worth_target: getVal('t_networth'),
+          monthly_savings_target: getVal('t_monthly'),
+        });
+        await api.load();
+        rerenderInPlace();
+        toast('Targets saved ✓', 'good');
+      } catch (e) { toast(e.message, 'bad'); }
+    });
   });
 
   if (hasAny) renderTargetInsights(m, year);
@@ -869,29 +1011,82 @@ function toast(msg, kind = '') {
 // boot
 // ---------------------------------------------------------------------------
 
-document.getElementById('tabs').addEventListener('click', (e) => {
-  const btn = e.target.closest('.tab');
-  if (!btn) return;
-  state.view = btn.dataset.view;
-  location.hash = btn.dataset.view;
+const VIEWS = ['dashboard', 'p1', 'p2', 'targets'];
+
+function switchView(view) {
+  if (!VIEWS.includes(view)) return;
+  state.view = view;
+  location.hash = view;
   render();
-});
+  window.scrollTo(0, 0);
+}
+
+// top pills and bottom nav share the same delegation
+for (const navId of ['tabs', 'bottomnav']) {
+  document.getElementById(navId)?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab');
+    if (btn) switchView(btn.dataset.view);
+  });
+}
 
 window.addEventListener('hashchange', () => {
   const v = location.hash.replace('#', '');
-  if (['dashboard', 'p1', 'p2', 'targets'].includes(v) && v !== state.view) {
+  if (VIEWS.includes(v) && v !== state.view) {
     state.view = v;
     render();
+    window.scrollTo(0, 0);
   }
 });
 
-(async function init() {
+document.getElementById('logoutBtn').addEventListener('click', () => api.logout());
+
+// When the tab regains focus (e.g. your partner just updated their figures on
+// another device), quietly re-fetch and re-render if anything changed. Skipped
+// while a form field has focus so it never wipes half-typed input.
+const dataSnapshot = () => JSON.stringify([state.partners, state.entries, state.targets]);
+let lastRefresh = 0;
+async function refreshOnFocus() {
+  if (document.hidden) return;
+  if (Date.now() - lastRefresh < 15000) return;
+  const active = document.activeElement;
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+  lastRefresh = Date.now();
   try {
+    const before = dataSnapshot();
     await api.load();
-    const v = location.hash.replace('#', '');
-    if (['dashboard', 'p1', 'p2', 'targets'].includes(v)) state.view = v;
-    render();
-  } catch (e) {
-    appEl.innerHTML = `<div class="empty">Couldn't load data: ${escapeHtml(e.message)}</div>`;
+    if (dataSnapshot() !== before) {
+      rerenderInPlace();
+      toast('Updated with the latest figures', 'good');
+    }
+  } catch { /* transient network blip — the next focus will retry */ }
+}
+document.addEventListener('visibilitychange', refreshOnFocus);
+window.addEventListener('focus', refreshOnFocus);
+
+// First load, tolerant of free-tier hosting waking from sleep (which can take
+// ~30s or so): retry with growing delays and an honest status message instead
+// of failing on the first hiccup.
+(async function init() {
+  const loadingEl = document.getElementById('loadingMsg');
+  const delays = [0, 2000, 4000, 8000, 12000, 15000];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt]) await new Promise((r) => setTimeout(r, delays[attempt]));
+    try {
+      await api.load();
+      lastRefresh = Date.now();
+      const v = location.hash.replace('#', '');
+      if (VIEWS.includes(v)) state.view = v;
+      render();
+      return;
+    } catch (e) {
+      if (attempt === 0 && loadingEl) {
+        loadingEl.textContent = 'Waking up the server… this can take up to a minute on free hosting.';
+      }
+    }
   }
+  appEl.innerHTML = `
+    <div class="empty">
+      Still couldn't reach the server — it may be waking up or offline.<br><br>
+      <button class="btn-primary" onclick="location.reload()">Try again</button>
+    </div>`;
 })();
