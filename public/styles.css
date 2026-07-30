@@ -118,7 +118,7 @@ body::before {
   flex-wrap: wrap;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: clamp(15px, 3vw, 18px); flex-shrink: 0; }
-.brand-mark { font-size: clamp(20px, 4vw, 22px); }
+.brand-mark { width: clamp(24px, 4.5vw, 28px); height: auto; border-radius: 7px; display: block; }
 .brand-name {
   background: linear-gradient(90deg, #4f46e5, #9333ea, #db2777);
   -webkit-background-clip: text; background-clip: text;

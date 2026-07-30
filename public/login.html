@@ -8,9 +8,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Our Wealth" />
   <title>Sign in · Our Wealth</title>
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💷</text></svg>" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+  <link rel="icon" type="image/svg+xml" href="/icons/logo.svg" />
+  <link rel="mask-icon" href="/icons/logo.svg" color="#9333ea" />
   <style>
     * { box-sizing: border-box; }
     html { background: #f4f6fc; color-scheme: light; }
@@ -48,7 +52,7 @@
       border-radius: 28px; padding: 36px 30px;
       box-shadow: 0 16px 44px rgba(30,41,59,.14), 0 2px 8px rgba(30,41,59,.06), inset 0 1px 0 rgba(255,255,255,.8);
     }
-    .brand { font-size: 42px; text-align: center; }
+    .brand { display: block; width: 60px; height: 60px; margin: 0 auto; border-radius: 15px; }
     h1 {
       font-size: 20px; text-align: center; margin: 8px 0 26px; font-weight: 800;
       background: linear-gradient(90deg, #4338ca, #a21caf);
@@ -80,7 +84,7 @@
 </head>
 <body>
   <form class="card" id="form">
-    <div class="brand">💷</div>
+    <img class="brand" src="/icons/logo.svg" alt="Our Wealth" width="60" height="60" />
     <h1>Our Wealth</h1>
     <label for="password">Password</label>
     <input type="password" id="password" autocomplete="current-password" autofocus />
