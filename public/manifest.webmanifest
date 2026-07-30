@@ -1,6 +1,6 @@
 {
   "name": "Our Wealth",
-  "short_name": "Wealth",
+  "short_name": "Our Wealth",
   "description": "A shared wealth dashboard for two people",
   "start_url": "/",
   "scope": "/",
@@ -8,8 +8,9 @@
   "background_color": "#f4f6fc",
   "theme_color": "#f4f6fc",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

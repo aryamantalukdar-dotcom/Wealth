@@ -56,6 +56,21 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+// Browsers and iOS probe for icons at fixed root paths regardless of what the
+// HTML declares, so answer those too — otherwise Safari falls back to a plain
+// letter tile on the home screen.
+const ICON_DIR = path.join(__dirname, 'public', 'icons');
+const ROOT_ICONS = {
+  '/favicon.ico': 'favicon-32.png',
+  '/favicon.png': 'favicon-32.png',
+  '/apple-touch-icon.png': 'apple-touch-icon.png',
+  '/apple-touch-icon-precomposed.png': 'apple-touch-icon.png',
+  '/apple-touch-icon-180x180.png': 'apple-touch-icon.png',
+};
+app.get(Object.keys(ROOT_ICONS), (req, res) => {
+  res.sendFile(path.join(ICON_DIR, ROOT_ICONS[req.path]));
+});
+
 // Gate everything else. The PWA manifest and icons stay public: browsers fetch
 // the manifest without cookies, so gating them would silently break
 // add-to-home-screen installability (and they contain nothing sensitive).
