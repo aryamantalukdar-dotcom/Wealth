@@ -8,8 +8,10 @@ const state = {
   partners: [],   // [{id, name}]
   entries: [],    // [{id, partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved}]
   targets: [],    // [{year, net_worth_target, monthly_savings_target}]
+  goals: [],      // [{id, name, emoji, target_amount, target_month, saved_amount}]
   view: 'dashboard',
   targetYear: new Date().getFullYear(),
+  editingGoalId: null,
 };
 
 let charts = {}; // active Chart.js instances, destroyed on re-render
@@ -39,6 +41,7 @@ const api = {
     state.partners = d.partners;
     state.entries = d.entries;
     state.targets = d.targets || [];
+    state.goals = d.goals || [];
   },
   async renamePartner(id, name) {
     const r = await apiFetch(`/api/partners/${id}`, jsonOpts('PUT', { name }));
@@ -57,6 +60,15 @@ const api = {
     const r = await apiFetch('/api/targets', jsonOpts('POST', t));
     if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
     return r.json();
+  },
+  async saveGoal(g) {
+    const r = await apiFetch('/api/goals', jsonOpts('POST', g));
+    if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
+    return r.json();
+  },
+  async deleteGoal(id) {
+    const r = await apiFetch(`/api/goals/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Delete failed');
   },
   async logout() {
     await fetch('/api/logout', { method: 'POST' });
@@ -360,14 +372,15 @@ let lastHeroValue = null;
 
 // Download every recorded month as a CSV — an easy off-site backup.
 function exportCsv() {
-  const header = 'Partner,Month,Current account,Cash savings,Investments,Credit card owed,Saved this month,Net worth';
+  const header = 'Partner,Month,Current account,Cash savings,Investments,Credit card owed,Saved this month,Net worth,Note';
+  const csvText = (s) => `"${String(s || '').replace(/"/g, '""')}"`;
   const rows = state.entries
     .slice()
     .sort((a, b) => a.month.localeCompare(b.month) || a.partner_id - b.partner_id)
     .map((e) => [
-      `"${partnerName(e.partner_id).replace(/"/g, '""')}"`,
+      csvText(partnerName(e.partner_id)),
       e.month, e.current_account, e.cash_savings, e.investments,
-      e.credit_card, e.monthly_saved, entryNet(e),
+      e.credit_card, e.monthly_saved, entryNet(e), csvText(e.note),
     ].join(','));
   const blob = new Blob([header + '\n' + rows.join('\n') + '\n'], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -401,11 +414,14 @@ function renderBreakdown(totals) {
     </div>`;
 }
 
-// Draws the combined total in the doughnut's hollow centre.
+// Draws the combined total in the doughnut's hollow centre. Uses the real
+// combined net worth (chart.$trueTotal) rather than summing the drawn slice
+// values, which are clamped at zero and would overstate the total if either
+// partner is in the red.
 const centreTotalPlugin = {
   id: 'centreTotal',
   afterDraw(chart) {
-    const total = chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+    const total = chart.$trueTotal ?? chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
     const { ctx } = chart;
     // anchor to the arc's own centre so the label always sits in the hollow,
     // even mid-resize
@@ -427,16 +443,30 @@ const centreTotalPlugin = {
 };
 
 function renderSplitChart() {
-  const data = state.partners.map((p) => {
+  // True net worth per partner, which can legitimately be negative.
+  const actual = state.partners.map((p) => {
     const e = latestEntry(p.id);
-    return e ? Math.max(0, entryNet(e)) : 0;
+    return e ? entryNet(e) : 0;
   });
+  // A doughnut can only draw non-negative magnitudes, so the slice sizes are
+  // clamped — but every number we *print* uses the real figure, and a partner
+  // in the red is labelled as such rather than silently shown as £0.
+  const data = actual.map((v) => Math.max(0, v));
   const legend = document.getElementById('splitLegend');
   const grads = [partnerGrad(1), partnerGrad(2)];
 
-  if (data.every((d) => d === 0)) {
+  if (actual.every((d) => d === 0)) {
     document.getElementById('splitChart').parentElement.innerHTML =
       '<div class="empty">Add figures on each partner tab to see the split.</div>';
+    legend.innerHTML = '';
+    return;
+  }
+  if (data.every((d) => d === 0)) {
+    // Everyone is in the red: a ring would be meaningless, so state it plainly.
+    document.getElementById('splitChart').parentElement.innerHTML =
+      `<div class="empty">You're both in the red right now — clearing debt is the first win.<br>` +
+      state.partners.map((p, i) => `${escapeHtml(p.name)}: <strong class="neg">${money(actual[i])}</strong>`).join(' · ') +
+      `</div>`;
     legend.innerHTML = '';
     return;
   }
@@ -471,16 +501,24 @@ function renderSplitChart() {
       layout: { padding: 8 },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (c) => `${c.label}: ${money(c.parsed)}` } },
+        // tooltips quote the real figure, including a negative one
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${money(actual[c.dataIndex])}` } },
       },
     },
     plugins: [centreTotalPlugin],
   });
+  charts.split.$trueTotal = actual.reduce((a, b) => a + b, 0);
+  charts.split.update('none');
 
-  const total = data.reduce((a, b) => a + b, 0) || 1;
-  legend.innerHTML = state.partners.map((p, i) =>
-    `<span><span class="dot" style="background:linear-gradient(135deg, ${grads[i][0]}, ${grads[i][1]})"></span>${p.name} — ${money(data[i])} (${Math.round(data[i] / total * 100)}%)</span>`
-  ).join('');
+  // Percentages are shares of the positive holdings the ring actually depicts;
+  // a partner in the red gets "in the red" instead of a meaningless 0%.
+  const positiveTotal = data.reduce((a, b) => a + b, 0) || 1;
+  legend.innerHTML = state.partners.map((p, i) => {
+    const share = actual[i] < 0
+      ? '<span class="neg">in the red</span>'
+      : `${Math.round(data[i] / positiveTotal * 100)}%`;
+    return `<span><span class="dot" style="background:linear-gradient(135deg, ${grads[i][0]}, ${grads[i][1]})"></span>${escapeHtml(p.name)} — <span class="${actual[i] < 0 ? 'neg' : ''}">${money(actual[i])}</span> (${share})</span>`;
+  }).join('');
 }
 
 function renderTrendChart(months, avgSaved) {
@@ -547,7 +585,19 @@ function renderTrendChart(months, avgSaved) {
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { labels: { color: '#475569', usePointStyle: true, boxWidth: 8 } },
-        tooltip: { callbacks: { label: (c) => c.parsed.y == null ? null : `${c.dataset.label}: ${money(c.parsed.y)}` } },
+        tooltip: {
+          callbacks: {
+            label: (c) => c.parsed.y == null ? null : `${c.dataset.label}: ${money(c.parsed.y)}`,
+            // surface that month's notes so a spike or dip explains itself
+            afterBody: (items) => {
+              const month = months[items[0].dataIndex];
+              if (!month) return [];
+              return state.entries
+                .filter((e) => e.month === month && e.note)
+                .map((e) => `📝 ${partnerName(e.partner_id)}: ${e.note}`);
+            },
+          },
+        },
       },
       scales: {
         x: { grid: { color: 'rgba(15,23,42,.07)' }, ticks: { color: '#64748b' } },
@@ -685,7 +735,12 @@ function renderPartner(id) {
           <div class="field">
             <label for="f_saved">Saved this month <span class="hint">£ set aside</span></label>
             <input type="number" step="0.01" id="f_saved" placeholder="0" />
+            <span id="savedCheck" class="month-note" hidden></span>
           </div>
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label for="f_note">Note <span class="hint">optional — e.g. "bonus paid", "car repair"</span></label>
+          <input type="text" id="f_note" maxlength="200" placeholder="What happened this month?" />
         </div>
         <div class="form-actions">
           <button type="submit" class="btn-primary">Save month</button>
@@ -716,6 +771,7 @@ function renderPartner(id) {
       setVal('f_card', src.credit_card);
       setVal('f_saved', existing ? existing.monthly_saved : '');
     }
+    setVal('f_note', existing ? (existing.note || '') : '');
     if (!month) { monthNote.hidden = true; return; }
     monthNote.hidden = false;
     if (existing) {
@@ -727,9 +783,40 @@ function renderPartner(id) {
         ? `➕ New month — pre-filled from ${prettyMonth(latest.month)}, adjust and save`
         : '➕ Your first month — fill in what you have today';
     }
+    checkSavedFigure();
   };
+
+  // Sanity-check the typed "saved this month" against what the balances
+  // actually moved. Net worth can outpace saving (investment growth), so we
+  // only flag the direction that can't be explained away: claiming to have
+  // saved materially more than your net worth actually rose.
+  const savedCheck = document.getElementById('savedCheck');
+  function checkSavedFigure() {
+    const month = monthInput.value;
+    savedCheck.hidden = true;
+    if (!month) return;
+    const prior = partnerEntries(id).filter((e) => e.month < month);
+    if (!prior.length) return;                       // nothing to compare against
+    const prev = prior[prior.length - 1];
+    const stated = getVal('f_saved');
+    if (stated <= 0) return;
+
+    const nowNet = getVal('f_current') + getVal('f_cash') + getVal('f_invest') - getVal('f_card');
+    const change = nowNet - entryNet(prev);
+    const tolerance = Math.max(100, stated * 0.25);
+    if (stated - change > tolerance) {
+      savedCheck.hidden = false;
+      savedCheck.className = 'month-note warn';
+      savedCheck.textContent = change < 0
+        ? `⚠️ You saved ${money(stated)}, but your net worth fell ${money(Math.abs(change))} since ${prettyMonth(prev.month)} — spending elsewhere?`
+        : `⚠️ You saved ${money(stated)}, but net worth only rose ${money(change)} since ${prettyMonth(prev.month)}`;
+    }
+  }
+
   syncFormToMonth();
   monthInput.addEventListener('change', syncFormToMonth);
+  ['f_current', 'f_cash', 'f_invest', 'f_card', 'f_saved'].forEach((f) =>
+    document.getElementById(f).addEventListener('input', checkSavedFigure));
 
   // history: load a row into the form / delete a row
   document.querySelectorAll('#histBody tr').forEach((tr) => {
@@ -782,6 +869,7 @@ function renderPartner(id) {
       investments: getVal('f_invest'),
       credit_card: getVal('f_card'),
       monthly_saved: getVal('f_saved'),
+      note: (document.getElementById('f_note').value || '').trim(),
     };
     if (!entry.month) return toast('Pick a month', 'bad');
     await withBusy(ev.submitter || document.querySelector('#entryForm .btn-primary'), 'Saving…', async () => {
@@ -802,7 +890,7 @@ function historyTable(es) {
     const delta = older ? entryNet(e) - entryNet(older) : null;
     return `
     <tr data-id="${e.id}">
-      <td>${prettyMonth(e.month)}</td>
+      <td>${prettyMonth(e.month)}${e.note ? ` <span class="note-chip" title="${escapeAttr(e.note)}">📝 ${escapeHtml(e.note)}</span>` : ''}</td>
       <td>${money(e.current_account)}</td>
       <td>${money(e.cash_savings)}</td>
       <td>${money(e.investments)}</td>
@@ -823,6 +911,182 @@ function historyTable(es) {
     </tr></thead>
     <tbody id="histBody">${rows}</tbody>
   </table></div>`;
+}
+
+// ---- Named savings goals (wedding, house deposit, …) -----------------------
+
+const GOAL_EMOJI = ['🎯', '💍', '🏡', '🚗', '✈️', '🎓', '👶', '🛟', '🎁', '💻'];
+
+// Months from now (inclusive) until the given 'YYYY-MM'. null when open-ended,
+// 0 when the deadline has already passed.
+function monthsUntil(month) {
+  if (!month) return null;
+  const [y, mo] = month.split('-').map(Number);
+  const now = new Date();
+  return Math.max(0, (y * 12 + (mo - 1)) - (now.getFullYear() * 12 + now.getMonth()));
+}
+
+function goalMetrics(g) {
+  const target = g.target_amount || 0;
+  const saved = g.saved_amount || 0;
+  const remaining = Math.max(0, target - saved);
+  const pct = target > 0 ? clampPct(saved / target * 100) : 0;
+  const monthsLeft = monthsUntil(g.target_month);
+  const perMonth = monthsLeft && remaining > 0 ? remaining / monthsLeft : null;
+  return { target, saved, remaining, pct, monthsLeft, perMonth, done: target > 0 && saved >= target };
+}
+
+function savingsGoalsSection() {
+  const goals = state.goals;
+  const editing = state.editingGoalId != null
+    ? goals.find((g) => g.id === state.editingGoalId) || null
+    : null;
+  const isNew = state.editingGoalId === 'new';
+  const f = editing || {};
+
+  const cards = goals.length
+    ? `<div class="grid cols-2 section-gap">${goals.map(goalCard).join('')}</div>`
+    : `<div class="card section-gap"><div class="empty">
+         No savings goals yet — add one for the things you're actually saving towards.
+       </div></div>`;
+
+  const form = (isNew || editing) ? `
+    <div class="card section-gap">
+      <h3>${isNew ? 'New savings goal' : 'Edit goal'}</h3>
+      <form id="goalForm">
+        <div class="emoji-pick" id="emojiPick">
+          ${GOAL_EMOJI.map((e) => `
+            <button type="button" class="emoji-opt ${(f.emoji || '🎯') === e ? 'sel' : ''}" data-emoji="${e}">${e}</button>
+          `).join('')}
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="g_name">What are you saving for?</label>
+            <input type="text" id="g_name" maxlength="60" placeholder="Wedding" value="${escapeAttr(f.name || '')}" required />
+          </div>
+          <div class="field">
+            <label for="g_target">Target amount <span class="hint">£</span></label>
+            <input type="number" step="any" min="0" id="g_target" placeholder="0" value="${f.target_amount || ''}" />
+          </div>
+          <div class="field">
+            <label for="g_saved">Saved so far <span class="hint">£ put aside for this</span></label>
+            <input type="number" step="any" min="0" id="g_saved" placeholder="0" value="${f.saved_amount || ''}" />
+          </div>
+          <div class="field">
+            <label for="g_month">Target date <span class="hint">optional</span></label>
+            <input type="month" id="g_month" value="${f.target_month || ''}" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">${isNew ? 'Add goal' : 'Save goal'}</button>
+          <button type="button" class="btn-ghost" id="goalCancel">Cancel</button>
+        </div>
+      </form>
+    </div>` : '';
+
+  return `
+    <div class="goals-head section-gap">
+      <h2 class="section-title">Savings goals</h2>
+      ${(isNew || editing) ? '' : `<button class="btn-primary btn-small" id="goalAdd">+ New goal</button>`}
+    </div>
+    ${form}
+    ${cards}
+  `;
+}
+
+function goalCard(g) {
+  const m = goalMetrics(g);
+  const when = g.target_month ? prettyMonth(g.target_month) : null;
+  let status;
+  if (m.done) {
+    status = `🎉 Fully funded`;
+  } else if (m.monthsLeft === 0 && when) {
+    status = `${when} passed · ${money(m.remaining)} short`;
+  } else if (m.perMonth) {
+    status = `${money(m.remaining)} to go · ${money(m.perMonth)}/mo until ${when}`;
+  } else {
+    status = `${money(m.remaining)} to go`;
+  }
+  return `<div class="card goal-card ${m.done ? 'funded' : ''}" data-goal="${g.id}">
+    <div class="goal-top">
+      <span class="goal-emoji">${escapeHtml(g.emoji || '🎯')}</span>
+      <div class="goal-name">${escapeHtml(g.name)}</div>
+      <div class="goal-actions">
+        <button class="btn-ghost btn-small goal-edit" aria-label="Edit goal">✏️</button>
+        <button class="btn-danger btn-small goal-del" aria-label="Delete goal">✕</button>
+      </div>
+    </div>
+    <div class="target-num">${money(m.saved)} <span class="target-sub">of ${money(m.target)}</span></div>
+    ${progressBar(m.pct, m.done || m.monthsLeft === null || m.monthsLeft > 0)}
+    <div class="target-status ${m.done ? 'pos' : 'warnc'}">${Math.round(m.pct)}% · ${status}</div>
+  </div>`;
+}
+
+function wireSavingsGoals() {
+  document.getElementById('goalAdd')?.addEventListener('click', () => {
+    state.editingGoalId = 'new';
+    rerenderInPlace();
+  });
+  document.getElementById('goalCancel')?.addEventListener('click', () => {
+    state.editingGoalId = null;
+    rerenderInPlace();
+  });
+
+  document.querySelectorAll('.goal-card').forEach((card) => {
+    const id = Number(card.dataset.goal);
+    card.querySelector('.goal-edit')?.addEventListener('click', () => {
+      state.editingGoalId = id;
+      rerenderInPlace();
+    });
+    card.querySelector('.goal-del')?.addEventListener('click', async (ev) => {
+      const g = state.goals.find((x) => x.id === id);
+      if (!confirm(`Delete the "${g ? g.name : 'this'}" goal?`)) return;
+      await withBusy(ev.currentTarget, '…', async () => {
+        try {
+          await api.deleteGoal(id);
+          await api.load();
+          rerenderInPlace();
+          toast('Goal deleted', 'good');
+        } catch (e) { toast(e.message, 'bad'); }
+      });
+    });
+  });
+
+  // emoji picker
+  const pick = document.getElementById('emojiPick');
+  pick?.addEventListener('click', (e) => {
+    const b = e.target.closest('.emoji-opt');
+    if (!b) return;
+    pick.querySelectorAll('.emoji-opt').forEach((x) => x.classList.remove('sel'));
+    b.classList.add('sel');
+  });
+
+  document.getElementById('goalForm')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const name = document.getElementById('g_name').value.trim();
+    if (!name) return toast('Give the goal a name', 'bad');
+    const payload = {
+      name,
+      emoji: pick?.querySelector('.emoji-opt.sel')?.dataset.emoji || '🎯',
+      target_amount: getVal('g_target'),
+      saved_amount: getVal('g_saved'),
+      target_month: document.getElementById('g_month').value || null,
+    };
+    if (state.editingGoalId !== 'new') payload.id = state.editingGoalId;
+    await withBusy(ev.submitter || document.querySelector('#goalForm .btn-primary'), 'Saving…', async () => {
+      try {
+        const before = state.goals.find((g) => g.id === state.editingGoalId);
+        await api.saveGoal(payload);
+        await api.load();
+        state.editingGoalId = null;
+        rerenderInPlace();
+        toast('Goal saved ✓', 'good');
+        // celebrate the moment a goal becomes fully funded
+        const wasDone = before && before.target_amount > 0 && before.saved_amount >= before.target_amount;
+        if (!wasDone && payload.target_amount > 0 && payload.saved_amount >= payload.target_amount) celebrate();
+      } catch (e) { toast(e.message, 'bad'); }
+    });
+  });
 }
 
 // ---- Targets view ----------------------------------------------------------
@@ -911,6 +1175,8 @@ function renderTargets() {
         <div id="targetInsights"></div>
       </div>
     ` : `<div class="card section-gap"><div class="empty">Set a target above to start tracking your progress.</div></div>`}
+
+    ${savingsGoalsSection()}
   `;
 
   const clampYear = (y) => Math.min(new Date().getFullYear() + 10, Math.max(new Date().getFullYear() - 5, y));
@@ -950,6 +1216,7 @@ function renderTargets() {
   });
 
   if (hasAny) renderTargetInsights(m, year);
+  wireSavingsGoals();
 
   // a goal reached deserves a moment
   const goalHit =
@@ -1039,21 +1306,26 @@ function renderTargetInsights(m, year) {
   el.innerHTML = items.length ? items.join('') : `<div class="empty">Set some targets to see tailored guidance.</div>`;
 }
 
-// Compact goals strip shown on the dashboard (current year only).
+// Compact goals strip shown on the dashboard (current year + named goals).
 function dashboardGoalsCard() {
   const year = new Date().getFullYear();
   const t = targetsFor(year);
-  if (!t || !(t.net_worth_target || t.monthly_savings_target)) return '';
   const m = targetMetrics(year);
   const rows = [];
-  if (t.net_worth_target)
+  if (t && t.net_worth_target)
     rows.push(miniGoal(`Net worth ${year}`, m.netNow, t.net_worth_target, m.nwPct, m.nwGap <= 0 || m.avgSaved >= m.nwReqMonthly));
-  if (t.monthly_savings_target)
+  if (t && t.monthly_savings_target)
     rows.push(miniGoal('Monthly saving', m.avgSaved, t.monthly_savings_target, m.msPct, m.avgSaved >= t.monthly_savings_target));
+  for (const g of state.goals) {
+    const gm = goalMetrics(g);
+    rows.push(miniGoal(`${g.emoji || '🎯'} ${escapeHtml(g.name)}`, gm.saved, gm.target, gm.pct,
+      gm.done || gm.monthsLeft === null || gm.monthsLeft > 0));
+  }
+  if (!rows.length) return '';
   return `<div class="card section-gap">
-    <h3>Goals progress · ${year}</h3>
+    <h3>Goals progress</h3>
     ${rows.join('')}
-    <div style="margin-top:10px"><a class="goals-link" href="#targets">Manage targets →</a></div>
+    <div style="margin-top:10px"><a class="goals-link" href="#targets">Manage goals &amp; targets →</a></div>
   </div>`;
 }
 

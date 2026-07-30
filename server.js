@@ -88,7 +88,8 @@ app.get('/api/data', async (req, res, next) => {
       await db.execute('SELECT * FROM entries ORDER BY month ASC, partner_id ASC')
     ).rows;
     const targets = (await db.execute('SELECT * FROM targets ORDER BY year')).rows;
-    res.json({ partners, entries, targets, currency: 'GBP' });
+    const goals = (await db.execute('SELECT * FROM goals ORDER BY id')).rows;
+    res.json({ partners, entries, targets, goals, currency: 'GBP' });
   } catch (e) {
     next(e);
   }
@@ -131,20 +132,22 @@ app.post('/api/entries', async (req, res, next) => {
       cash_savings: num(b.cash_savings),
       investments: num(b.investments),
       monthly_saved: num(b.monthly_saved),
+      note: String(b.note || '').slice(0, 200),
       updated_at: new Date().toISOString(),
     };
 
     await db.execute({
       sql: `INSERT INTO entries
-         (partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved, updated_at)
+         (partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved, note, updated_at)
        VALUES
-         (:partner_id, :month, :current_account, :credit_card, :cash_savings, :investments, :monthly_saved, :updated_at)
+         (:partner_id, :month, :current_account, :credit_card, :cash_savings, :investments, :monthly_saved, :note, :updated_at)
        ON CONFLICT(partner_id, month) DO UPDATE SET
          current_account = :current_account,
          credit_card     = :credit_card,
          cash_savings    = :cash_savings,
          investments     = :investments,
          monthly_saved   = :monthly_saved,
+         note            = :note,
          updated_at      = :updated_at`,
       args,
     });
@@ -204,6 +207,62 @@ app.post('/api/targets', async (req, res, next) => {
       await db.execute({ sql: 'SELECT * FROM targets WHERE year = ?', args: [year] })
     ).rows[0];
     res.json(saved);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ---- named savings goals (wedding fund, house deposit, …) ------------------
+
+// Create a goal, or update one when an id is supplied.
+app.post('/api/goals', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const name = String(b.name || '').trim().slice(0, 60);
+    if (!name) return res.status(400).json({ error: 'Give the goal a name' });
+    if (b.target_month != null && b.target_month !== '' && !isMonth(b.target_month)) {
+      return res.status(400).json({ error: 'Target month must be in YYYY-MM format' });
+    }
+    const args = {
+      name,
+      emoji: String(b.emoji || '🎯').slice(0, 8),
+      target_amount: Math.max(0, num(b.target_amount)),
+      target_month: b.target_month || null,
+      saved_amount: Math.max(0, num(b.saved_amount)),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (b.id != null && b.id !== '') {
+      const info = await db.execute({
+        sql: `UPDATE goals SET name = :name, emoji = :emoji, target_amount = :target_amount,
+                target_month = :target_month, saved_amount = :saved_amount, updated_at = :updated_at
+              WHERE id = :id`,
+        args: { ...args, id: Number(b.id) },
+      });
+      if (info.rowsAffected === 0) return res.status(404).json({ error: 'Goal not found' });
+      const row = (await db.execute({ sql: 'SELECT * FROM goals WHERE id = ?', args: [Number(b.id)] })).rows[0];
+      return res.json(row);
+    }
+
+    const ins = await db.execute({
+      sql: `INSERT INTO goals (name, emoji, target_amount, target_month, saved_amount, created_at, updated_at)
+            VALUES (:name, :emoji, :target_amount, :target_month, :saved_amount, :updated_at, :updated_at)`,
+      args,
+    });
+    const row = (await db.execute({
+      sql: 'SELECT * FROM goals WHERE id = ?', args: [Number(ins.lastInsertRowid)],
+    })).rows[0];
+    res.json(row);
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/goals/:id', async (req, res, next) => {
+  try {
+    const info = await db.execute({ sql: 'DELETE FROM goals WHERE id = ?', args: [Number(req.params.id)] });
+    if (info.rowsAffected === 0) return res.status(404).json({ error: 'Goal not found' });
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }
