@@ -51,6 +51,27 @@ async function init() {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS goals (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      name          TEXT NOT NULL,
+      emoji         TEXT NOT NULL DEFAULT '🎯',
+      target_amount REAL NOT NULL DEFAULT 0,
+      target_month  TEXT,                       -- 'YYYY-MM', optional deadline
+      saved_amount  REAL NOT NULL DEFAULT 0,    -- put aside towards this goal so far
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+  `);
+
+  // Additive migration: monthly notes on entries. SQLite has no
+  // "ADD COLUMN IF NOT EXISTS", so check the table shape first. Existing rows
+  // keep their data; the column simply defaults to empty.
+  const cols = await db.execute('PRAGMA table_info(entries)');
+  if (!cols.rows.some((c) => c.name === 'note')) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN note TEXT NOT NULL DEFAULT ''`);
+  }
+
   // Seed the two partners on first run.
   const res = await db.execute('SELECT COUNT(*) AS n FROM partners');
   if (Number(res.rows[0].n) === 0) {

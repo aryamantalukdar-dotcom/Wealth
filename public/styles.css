@@ -466,6 +466,59 @@ button:active { transform: scale(.97); }
 }
 .month-note.update { background: rgba(180, 83, 9, 0.12); color: var(--warn); }
 .month-note.new { background: rgba(4, 120, 87, 0.10); color: var(--good); }
+.month-note.warn { background: rgba(190, 18, 60, 0.10); color: var(--bad); align-items: flex-start; text-align: left; }
+
+/* ---- monthly notes ---- */
+.note-chip {
+  display: inline-block; margin-left: 6px; padding: 2px 8px;
+  border-radius: var(--radius-pill); font-size: 11px; font-weight: 600;
+  background: var(--accent-soft); color: var(--muted);
+  max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* ---- savings goals ---- */
+.goals-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 4px;
+}
+.section-title { margin: 0; font-size: clamp(18px, 3vw, 21px); }
+
+.goal-card .goal-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.goal-card .goal-emoji {
+  width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px; background: var(--accent-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.goal-card .goal-name {
+  flex: 1; min-width: 0; font-weight: 700; font-size: 15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.goal-card .goal-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.goal-card .goal-actions button { padding: 6px 10px; min-height: 32px; font-size: 12px; }
+/* In-progress goals use the Targets tab's pink theme; green is reserved for
+   fully funded, so it stays a meaningful signal. */
+.goal-card .pbar-fill {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+.goal-card.funded .pbar-fill {
+  background: linear-gradient(90deg, #10b981, #34d399);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
+.emoji-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.emoji-opt {
+  width: 40px; height: 40px; min-height: 40px; padding: 0; font-size: 19px;
+  border-radius: 12px; background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border);
+}
+.emoji-opt:hover { background: rgba(255, 255, 255, 0.85); }
+.emoji-opt.sel {
+  background: var(--accent-soft); border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 
 /* ---- onboarding / welcome ---- */
 .welcome-steps { display: grid; gap: 14px; margin: 18px 0 22px; }
