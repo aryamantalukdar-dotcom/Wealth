@@ -290,10 +290,23 @@ function renderDashboard() {
   }
   const liquid = totals.current_account + totals.cash_savings;
 
-  // month-over-month change in combined net worth
+  // Month-over-month change in combined net worth, split by whose money moved.
+  // combinedNetAt sums each partner's latest entry at or before a month, so
+  // these per-partner figures add back up to the combined delta exactly.
   let delta = null;
+  let deltaParts = [];
   if (months.length >= 2) {
-    delta = combinedNetAt(months[months.length - 1]) - combinedNetAt(months[months.length - 2]);
+    const curM = months[months.length - 1];
+    const prevM = months[months.length - 2];
+    delta = combinedNetAt(curM) - combinedNetAt(prevM);
+    deltaParts = state.partners.map((p) => ({
+      id: p.id,
+      name: p.name,
+      change: (partnerNetAt(p.id, curM) ?? 0) - (partnerNetAt(p.id, prevM) ?? 0),
+      // No entry for the latest month means their figure is carried forward,
+      // so a £0 contribution is "hasn't updated", not "didn't move".
+      stale: !state.entries.some((e) => e.partner_id === p.id && e.month === curM),
+    }));
   }
 
   // average monthly saved across the last up-to-6 recorded combined months
@@ -313,7 +326,8 @@ function renderDashboard() {
         <div class="label">Total net worth</div>
         <div class="value ${combinedNow >= 0 ? '' : 'neg'}">${money(combinedNow)}</div>
         ${delta !== null
-          ? `<div class="delta ${delta >= 0 ? 'pos' : 'neg'}">${signed(delta)} vs last recorded month</div>`
+          ? `<div class="delta ${delta >= 0 ? 'pos' : 'neg'}">${signed(delta)} vs last recorded month</div>
+             ${deltaSplit(deltaParts)}`
           : `<div class="delta" style="color:var(--muted)">Add a second month to see your trend</div>`}
       </div>
       <div style="text-align:right">
@@ -389,6 +403,22 @@ function exportCsv() {
   a.click();
   URL.revokeObjectURL(a.href);
   toast('CSV downloaded ✓', 'good');
+}
+
+// Shows who the month-over-month change actually came from, in each partner's
+// own colour. Contributions sum to the headline delta.
+function deltaSplit(parts) {
+  if (!parts.length) return '';
+  return `<div class="delta-split">${parts.map((d) => {
+    const [from, to] = partnerGrad(d.id);
+    const label = d.stale
+      ? `<span class="delta-stale">no update yet</span>`
+      : `<strong class="${d.change >= 0 ? 'pos' : 'neg'}">${signed(d.change)}</strong>`;
+    return `<span class="delta-part">
+      <span class="dot" style="background:linear-gradient(135deg, ${from}, ${to})"></span>
+      ${escapeHtml(d.name)} ${label}
+    </span>`;
+  }).join('')}</div>`;
 }
 
 function statCard(label, value, cls = '', icon = '') {

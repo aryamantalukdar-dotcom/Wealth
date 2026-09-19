@@ -226,6 +226,17 @@ main { max-width: 1160px; margin: 0 auto; padding: clamp(18px, 4vw, 28px) clamp(
 }
 .hero .value.neg { background: none; -webkit-text-fill-color: unset; color: var(--bad); }
 .hero .delta { font-size: 14px; margin-top: 6px; font-weight: 600; }
+.delta-split { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.delta-part {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  white-space: nowrap;
+}
+.delta-part strong { font-weight: 800; }
+.delta-stale { color: var(--muted); font-weight: 600; font-style: italic; opacity: .85; }
 
 .stat .label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .stat .value { font-size: clamp(21px, 3.5vw, 26px); font-weight: 800; }
