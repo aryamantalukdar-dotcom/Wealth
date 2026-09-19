@@ -6,7 +6,7 @@
 
 const state = {
   partners: [],   // [{id, name}]
-  entries: [],    // [{id, partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved}]
+  entries: [],    // [{id, partner_id, month, current_account, credit_card, cash_savings, investments, paid_savings, paid_investments, note}]
   targets: [],    // [{year, net_worth_target, monthly_savings_target}]
   goals: [],      // [{id, name, emoji, target_amount, target_month, saved_amount}]
   view: 'dashboard',
@@ -199,31 +199,65 @@ function stalePartners() {
     .map(({ p, last }) => ({ id: p.id, name: p.name, since: last.month }));
 }
 
-// Splits a month's net-worth change into money put aside versus everything
-// else (market movement, spending from savings, one-off windfalls). The only
-// signal for "money added" is the self-reported monthly_saved, so the
-// remainder is genuinely "everything we can't attribute to saving".
-function movementFor(month) {
-  const months = allMonths();
-  const i = months.indexOf(month);
+// What one partner actually added in a month, broken down by where it went.
+//
+// Only two figures are declared — money paid into savings and into
+// investments. Everything else comes from the balances:
+//   left in current account = change in the current-account balance
+//   debt cleared            = reduction in the card balance
+//   growth & other          = whatever the balances did beyond those
+//
+// So money that simply sits in the current account counts as saving, and an
+// internal transfer nets to zero (cash falls, contributions rise) instead of
+// inventing savings that never happened.
+//
+// Returns null for a partner's first recorded month, which has nothing to
+// compare against.
+function contributionFor(partnerId, month) {
+  const es = partnerEntries(partnerId);
+  const i = es.findIndex((e) => e.month === month);
   if (i < 1) return null;
-  const prev = months[i - 1];
-  const change = combinedNetAt(month) - combinedNetAt(prev);
-  const saved = state.entries
-    .filter((e) => e.month === month)
-    .reduce((a, e) => a + e.monthly_saved, 0);
-  return { change, saved, other: change - saved };
+  const cur = es[i], prev = es[i - 1];
+  const intoSavings = cur.paid_savings || 0;
+  const intoInvest = cur.paid_investments || 0;
+  const leftInCurrent = cur.current_account - prev.current_account;
+  const debtCleared = prev.credit_card - cur.credit_card;
+  const saved = intoSavings + intoInvest + leftInCurrent + debtCleared;
+  const netChange = entryNet(cur) - entryNet(prev);
+  return { intoSavings, intoInvest, leftInCurrent, debtCleared, saved, netChange, growth: netChange - saved };
 }
 
-// Same split across every recorded month, for the all-time picture.
-function movementAllTime() {
-  const months = allMonths();
-  let change = 0, saved = 0;
-  for (let i = 1; i < months.length; i++) {
-    const m = movementFor(months[i]);
-    if (m) { change += m.change; saved += m.saved; }
+const ZERO_MOVE = { intoSavings: 0, intoInvest: 0, leftInCurrent: 0, debtCleared: 0, saved: 0, netChange: 0, growth: 0 };
+const addMove = (a, b) => ({
+  intoSavings: a.intoSavings + b.intoSavings,
+  intoInvest: a.intoInvest + b.intoInvest,
+  leftInCurrent: a.leftInCurrent + b.leftInCurrent,
+  debtCleared: a.debtCleared + b.debtCleared,
+  saved: a.saved + b.saved,
+  netChange: a.netChange + b.netChange,
+  growth: a.growth + b.growth,
+});
+
+// Both partners' contributions for a month, combined.
+function movementFor(month) {
+  let any = false;
+  let out = { ...ZERO_MOVE };
+  for (const p of state.partners) {
+    const c = contributionFor(p.id, month);
+    if (c) { out = addMove(out, c); any = true; }
   }
-  return { change, saved, other: change - saved, months: Math.max(0, months.length - 1) };
+  return any ? out : null;
+}
+
+// Every month a partner has a comparable previous entry for.
+function movementAllTime() {
+  let out = { ...ZERO_MOVE };
+  let months = 0;
+  for (const m of allMonths()) {
+    const mv = movementFor(m);
+    if (mv) { out = addMove(out, mv); months++; }
+  }
+  return { ...out, months };
 }
 
 // Headline numbers for the all-time stats row.
@@ -328,7 +362,7 @@ function renderDashboard() {
   const combinedNow = combinedNetAt(months[months.length - 1]);
 
   // combined category totals from each partner's latest entry
-  const totals = { current_account: 0, cash_savings: 0, investments: 0, credit_card: 0, monthly_saved: 0 };
+  const totals = { current_account: 0, cash_savings: 0, investments: 0, credit_card: 0 };
   for (const p of state.partners) {
     const e = latestEntry(p.id);
     if (e) {
@@ -336,7 +370,6 @@ function renderDashboard() {
       totals.cash_savings += e.cash_savings;
       totals.investments += e.investments;
       totals.credit_card += e.credit_card;
-      totals.monthly_saved += e.monthly_saved;
     }
   }
   const liquid = totals.current_account + totals.cash_savings;
@@ -362,6 +395,7 @@ function renderDashboard() {
 
   // average monthly saved across the last up-to-6 recorded combined months
   const avgSaved = averageCombinedMonthlySaved();
+  const latestMove = months.length ? movementFor(months[months.length - 1]) : null;
 
   appEl.innerHTML = `
     <div class="dash-head">
@@ -393,7 +427,7 @@ function renderDashboard() {
       ${statCard('Liquid (cash + accounts)', money(liquid), '', '💷')}
       ${statCard('Investments', money(totals.investments), '', '📈')}
       ${statCard('Credit card debt', money(totals.credit_card), totals.credit_card > 0 ? 'neg' : '', '💳')}
-      ${statCard('Saved this month', money(totals.monthly_saved), '', '🐷')}
+      ${statCard('Saved this month', latestMove ? money(latestMove.saved) : '—', '', '🐷')}
     </div>
 
     <div class="grid cols-2 section-gap">
@@ -441,7 +475,7 @@ let lastHeroValue = null;
 
 // Download every recorded month as a CSV — an easy off-site backup.
 function exportCsv() {
-  const header = 'Partner,Month,Current account,Cash savings,Investments,Credit card owed,Saved this month,Net worth,Note';
+  const header = 'Partner,Month,Current account,Cash savings,Investments,Credit card owed,Paid into savings,Paid into investments,Net worth,Note';
   const csvText = (s) => `"${String(s || '').replace(/"/g, '""')}"`;
   const rows = state.entries
     .slice()
@@ -449,7 +483,7 @@ function exportCsv() {
     .map((e) => [
       csvText(partnerName(e.partner_id)),
       e.month, e.current_account, e.cash_savings, e.investments,
-      e.credit_card, e.monthly_saved, entryNet(e), csvText(e.note),
+      e.credit_card, e.paid_savings || 0, e.paid_investments || 0, entryNet(e), csvText(e.note),
     ].join(','));
   const blob = new Blob([header + '\n' + rows.join('\n') + '\n'], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -481,30 +515,39 @@ function movementCard(months) {
   const stats = allTimeStats();
   if (!latest) return '';
 
-  const split = (label, saved, other, total) => `
+  const row = (dot, label, v) => `
+    <div class="mv-row"><span><span class="dot ${dot}"></span>${label}</span>
+      <strong class="${v >= 0 ? 'pos' : 'neg'}">${signed(v)}</strong></div>`;
+
+  const block = (label, m) => `
     <div class="mv-block">
       <div class="mv-head">${label}</div>
       <div class="mv-rows">
-        <div class="mv-row"><span><span class="dot mv-dot-saved"></span>Money you put aside</span>
-          <strong class="${saved >= 0 ? 'pos' : 'neg'}">${signed(saved)}</strong></div>
-        <div class="mv-row"><span><span class="dot mv-dot-other"></span>Growth &amp; everything else</span>
-          <strong class="${other >= 0 ? 'pos' : 'neg'}">${signed(other)}</strong></div>
+        ${row('mv-dot-savings', 'Paid into savings', m.intoSavings)}
+        ${row('mv-dot-invest', 'Paid into investments', m.intoInvest)}
+        ${row('mv-dot-cash', 'Left in current account', m.leftInCurrent)}
+        ${row('mv-dot-debt', 'Debt cleared', m.debtCleared)}
+        <div class="mv-row mv-total"><span>You actually saved</span>
+          <strong class="${m.saved >= 0 ? 'pos' : 'neg'}">${signed(m.saved)}</strong></div>
+        ${row('mv-dot-growth', 'Growth &amp; other', m.growth)}
         <div class="mv-row mv-total"><span>Net change</span>
-          <strong class="${total >= 0 ? 'pos' : 'neg'}">${signed(total)}</strong></div>
+          <strong class="${m.netChange >= 0 ? 'pos' : 'neg'}">${signed(m.netChange)}</strong></div>
       </div>
-      ${mvBar(saved, other)}
+      ${mvBar(m.saved, m.growth)}
     </div>`;
 
   return `<div class="card section-gap">
     <h3>What moved your wealth</h3>
     <div class="grid cols-2">
-      ${split(`This month · ${prettyMonth(months[months.length - 1])}`, latest.saved, latest.other, latest.change)}
-      ${split(`All time · ${all.months} month${all.months === 1 ? '' : 's'}`, all.saved, all.other, all.change)}
+      ${block(`This month · ${prettyMonth(months[months.length - 1])}`, latest)}
+      ${block(`All time · ${all.months} month${all.months === 1 ? '' : 's'}`, all)}
     </div>
     <div class="mv-note">
-      "Growth &amp; everything else" is whatever your balances did beyond what you logged as saved —
-      investment movement, spending out of savings, or a one-off. If it looks wrong, the saved figure
-      for that month probably needs a correction.
+      Only the two "paid into" figures are ones you enter — the rest is worked out from your balances.
+      Money that simply stays in your current account still counts as saving, and moving cash into
+      savings or investments nets to zero rather than counting twice.
+      <strong>Growth &amp; other</strong> is whatever the balances did beyond what you paid in:
+      mostly investment movement, plus interest.
     </div>
     <div class="alltime">
       ${stats.best ? `<div class="at-stat"><div class="at-label">Best month</div><div class="at-value pos">${signed(stats.best.change)}</div><div class="at-sub">${prettyMonth(stats.best.month)}</div></div>` : ''}
@@ -769,7 +812,8 @@ function averageCombinedMonthlySaved() {
   let total = 0;
   for (const p of state.partners) {
     const own = partnerEntries(p.id).slice(-6);
-    if (own.length) total += own.reduce((a, e) => a + e.monthly_saved, 0) / own.length;
+    const vals = own.map((e) => contributionFor(p.id, e.month)).filter(Boolean).map((c) => c.saved);
+    if (vals.length) total += vals.reduce((a, v) => a + v, 0) / vals.length;
   }
   return total;
 }
@@ -887,11 +931,15 @@ function renderPartner(id) {
             <input type="number" step="0.01" id="f_card" placeholder="0" />
           </div>
           <div class="field">
-            <label for="f_saved">Saved this month <span class="hint">£ set aside</span></label>
-            <input type="number" step="0.01" id="f_saved" placeholder="0" />
-            <span id="savedCheck" class="month-note" hidden></span>
+            <label for="f_paid_sav">Paid into savings <span class="hint">£ moved in this month</span></label>
+            <input type="number" step="0.01" id="f_paid_sav" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="f_paid_inv">Paid into investments <span class="hint">£ moved in this month</span></label>
+            <input type="number" step="0.01" id="f_paid_inv" placeholder="0" />
           </div>
         </div>
+        <div id="savedCheck" class="saved-calc" hidden></div>
         <div class="field" style="margin-top:14px">
           <label for="f_note">Note <span class="hint">optional — e.g. "bonus paid", "car repair"</span></label>
           <input type="text" id="f_note" maxlength="200" placeholder="What happened this month?" />
@@ -923,7 +971,8 @@ function renderPartner(id) {
       setVal('f_cash', src.cash_savings);
       setVal('f_invest', src.investments);
       setVal('f_card', src.credit_card);
-      setVal('f_saved', existing ? existing.monthly_saved : '');
+      setVal('f_paid_sav', existing ? (existing.paid_savings || 0) : '');
+      setVal('f_paid_inv', existing ? (existing.paid_investments || 0) : '');
     }
     setVal('f_note', existing ? (existing.note || '') : '');
     if (!month) { monthNote.hidden = true; return; }
@@ -940,10 +989,9 @@ function renderPartner(id) {
     checkSavedFigure();
   };
 
-  // Sanity-check the typed "saved this month" against what the balances
-  // actually moved. Net worth can outpace saving (investment growth), so we
-  // only flag the direction that can't be explained away: claiming to have
-  // saved materially more than your net worth actually rose.
+  // Live view of what these numbers actually mean: the two declared figures
+  // plus what the balances imply. Shows the leftover current-account money
+  // counting as saving, which is the whole point of the split.
   const savedCheck = document.getElementById('savedCheck');
   function checkSavedFigure() {
     const month = monthInput.value;
@@ -952,24 +1000,33 @@ function renderPartner(id) {
     const prior = partnerEntries(id).filter((e) => e.month < month);
     if (!prior.length) return;                       // nothing to compare against
     const prev = prior[prior.length - 1];
-    const stated = getVal('f_saved');
-    if (stated <= 0) return;
 
+    const intoSavings = getVal('f_paid_sav');
+    const intoInvest = getVal('f_paid_inv');
+    const leftInCurrent = getVal('f_current') - prev.current_account;
+    const debtCleared = prev.credit_card - getVal('f_card');
+    const saved = intoSavings + intoInvest + leftInCurrent + debtCleared;
     const nowNet = getVal('f_current') + getVal('f_cash') + getVal('f_invest') - getVal('f_card');
-    const change = nowNet - entryNet(prev);
-    const tolerance = Math.max(100, stated * 0.25);
-    if (stated - change > tolerance) {
-      savedCheck.hidden = false;
-      savedCheck.className = 'month-note warn';
-      savedCheck.textContent = change < 0
-        ? `⚠️ You saved ${money(stated)}, but your net worth fell ${money(Math.abs(change))} since ${prettyMonth(prev.month)} — spending elsewhere?`
-        : `⚠️ You saved ${money(stated)}, but net worth only rose ${money(change)} since ${prettyMonth(prev.month)}`;
-    }
+    const netChange = nowNet - entryNet(prev);
+    const growth = netChange - saved;
+
+    const line = (label, v) =>
+      `<div class="sc-row"><span>${label}</span><strong class="${v >= 0 ? 'pos' : 'neg'}">${signed(v)}</strong></div>`;
+
+    savedCheck.hidden = false;
+    savedCheck.innerHTML = `
+      <div class="sc-head">Based on these figures, since ${prettyMonth(prev.month)}:</div>
+      ${line('Paid into savings', intoSavings)}
+      ${line('Paid into investments', intoInvest)}
+      ${line('Left in your current account', leftInCurrent)}
+      ${line('Debt cleared', debtCleared)}
+      <div class="sc-row sc-total"><span>You saved</span><strong class="${saved >= 0 ? 'pos' : 'neg'}">${signed(saved)}</strong></div>
+      ${line('Growth &amp; other', growth)}`;
   }
 
   syncFormToMonth();
   monthInput.addEventListener('change', syncFormToMonth);
-  ['f_current', 'f_cash', 'f_invest', 'f_card', 'f_saved'].forEach((f) =>
+  ['f_current', 'f_cash', 'f_invest', 'f_card', 'f_paid_sav', 'f_paid_inv'].forEach((f) =>
     document.getElementById(f).addEventListener('input', checkSavedFigure));
 
   // history: load a row into the form / delete a row
@@ -1022,7 +1079,8 @@ function renderPartner(id) {
       cash_savings: getVal('f_cash'),
       investments: getVal('f_invest'),
       credit_card: getVal('f_card'),
-      monthly_saved: getVal('f_saved'),
+      paid_savings: getVal('f_paid_sav'),
+      paid_investments: getVal('f_paid_inv'),
       note: (document.getElementById('f_note').value || '').trim(),
     };
     if (!entry.month) return toast('Pick a month', 'bad');
@@ -1049,7 +1107,7 @@ function historyTable(es) {
       <td>${money(e.cash_savings)}</td>
       <td>${money(e.investments)}</td>
       <td class="${e.credit_card > 0 ? 'neg' : ''}">${money(e.credit_card)}</td>
-      <td>${money(e.monthly_saved)}</td>
+      <td>${money((e.paid_savings || 0) + (e.paid_investments || 0))}</td>
       <td class="${entryNet(e) >= 0 ? '' : 'neg'}"><strong>${money(entryNet(e))}</strong></td>
       <td class="${delta === null ? '' : delta >= 0 ? 'pos' : 'neg'}">${delta === null ? '—' : signed(delta)}</td>
       <td class="row-actions">
@@ -1061,7 +1119,7 @@ function historyTable(es) {
   return `<div style="overflow-x:auto"><table>
     <thead><tr>
       <th>Month</th><th>Current a/c</th><th>Cash</th><th>Investments</th>
-      <th>Card debt</th><th>Saved</th><th>Net worth</th><th>Change</th><th></th>
+      <th>Card debt</th><th>Paid in</th><th>Net worth</th><th>Change</th><th></th>
     </tr></thead>
     <tbody id="histBody">${rows}</tbody>
   </table></div>`;
