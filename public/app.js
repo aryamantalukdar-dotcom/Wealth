@@ -187,6 +187,57 @@ function monthsRemainingInYear(year) {
   return Math.max(0, endIdx - nowIdx + 1);
 }
 
+// Partners whose latest figures are older than the newest recorded month, so
+// their numbers are being carried forward rather than actually current.
+function stalePartners() {
+  const months = allMonths();
+  if (!months.length) return [];
+  const newest = months[months.length - 1];
+  return state.partners
+    .map((p) => ({ p, last: latestEntry(p.id) }))
+    .filter(({ last }) => last && last.month < newest)
+    .map(({ p, last }) => ({ id: p.id, name: p.name, since: last.month }));
+}
+
+// Splits a month's net-worth change into money put aside versus everything
+// else (market movement, spending from savings, one-off windfalls). The only
+// signal for "money added" is the self-reported monthly_saved, so the
+// remainder is genuinely "everything we can't attribute to saving".
+function movementFor(month) {
+  const months = allMonths();
+  const i = months.indexOf(month);
+  if (i < 1) return null;
+  const prev = months[i - 1];
+  const change = combinedNetAt(month) - combinedNetAt(prev);
+  const saved = state.entries
+    .filter((e) => e.month === month)
+    .reduce((a, e) => a + e.monthly_saved, 0);
+  return { change, saved, other: change - saved };
+}
+
+// Same split across every recorded month, for the all-time picture.
+function movementAllTime() {
+  const months = allMonths();
+  let change = 0, saved = 0;
+  for (let i = 1; i < months.length; i++) {
+    const m = movementFor(months[i]);
+    if (m) { change += m.change; saved += m.saved; }
+  }
+  return { change, saved, other: change - saved, months: Math.max(0, months.length - 1) };
+}
+
+// Headline numbers for the all-time stats row.
+function allTimeStats() {
+  const months = allMonths();
+  const perMonth = [];
+  for (let i = 1; i < months.length; i++) {
+    perMonth.push({ month: months[i], change: combinedNetAt(months[i]) - combinedNetAt(months[i - 1]) });
+  }
+  const best = perMonth.reduce((a, b) => (b.change > (a ? a.change : -Infinity) ? b : a), null);
+  const avg = perMonth.length ? perMonth.reduce((a, b) => a + b.change, 0) / perMonth.length : 0;
+  return { best, avgChange: avg, monthsTracked: months.length, firstMonth: months[0] || null };
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -321,6 +372,8 @@ function renderDashboard() {
       <button class="btn-ghost btn-small" id="exportBtn" title="Download all recorded figures as a spreadsheet">⬇ Export CSV</button>
     </div>
 
+    ${staleBanner()}
+
     <div class="hero">
       <div>
         <div class="label">Total net worth</div>
@@ -361,6 +414,8 @@ function renderDashboard() {
         ? `<div class="chart-wrap"><canvas id="trendChart"></canvas></div>`
         : `<div class="empty">No data yet. Head to a partner tab and add your first month.</div>`}
     </div>
+
+    ${movementCard(months)}
 
     ${dashboardGoalsCard()}
 
@@ -403,6 +458,72 @@ function exportCsv() {
   a.click();
   URL.revokeObjectURL(a.href);
   toast('CSV downloaded ✓', 'good');
+}
+
+// Flags figures that are being carried forward, so a stale number is never
+// quietly presented as today's position.
+function staleBanner() {
+  const stale = stalePartners();
+  if (!stale.length) return '';
+  const who = stale.map((s) => `<strong>${escapeHtml(s.name)}</strong> (since ${prettyMonth(s.since)})`).join(' and ');
+  return `<div class="stale-banner">
+    <span class="stale-ico">&#9888;&#65039;</span>
+    <span>Showing carried-forward figures for ${who}. Totals below may be out of date until they add this month.</span>
+  </div>`;
+}
+
+// Separates money actually put aside from everything else that moved your net
+// worth — the difference between building wealth and riding a good month.
+function movementCard(months) {
+  if (months.length < 2) return '';
+  const latest = movementFor(months[months.length - 1]);
+  const all = movementAllTime();
+  const stats = allTimeStats();
+  if (!latest) return '';
+
+  const split = (label, saved, other, total) => `
+    <div class="mv-block">
+      <div class="mv-head">${label}</div>
+      <div class="mv-rows">
+        <div class="mv-row"><span><span class="dot mv-dot-saved"></span>Money you put aside</span>
+          <strong class="${saved >= 0 ? 'pos' : 'neg'}">${signed(saved)}</strong></div>
+        <div class="mv-row"><span><span class="dot mv-dot-other"></span>Growth &amp; everything else</span>
+          <strong class="${other >= 0 ? 'pos' : 'neg'}">${signed(other)}</strong></div>
+        <div class="mv-row mv-total"><span>Net change</span>
+          <strong class="${total >= 0 ? 'pos' : 'neg'}">${signed(total)}</strong></div>
+      </div>
+      ${mvBar(saved, other)}
+    </div>`;
+
+  return `<div class="card section-gap">
+    <h3>What moved your wealth</h3>
+    <div class="grid cols-2">
+      ${split(`This month · ${prettyMonth(months[months.length - 1])}`, latest.saved, latest.other, latest.change)}
+      ${split(`All time · ${all.months} month${all.months === 1 ? '' : 's'}`, all.saved, all.other, all.change)}
+    </div>
+    <div class="mv-note">
+      "Growth &amp; everything else" is whatever your balances did beyond what you logged as saved —
+      investment movement, spending out of savings, or a one-off. If it looks wrong, the saved figure
+      for that month probably needs a correction.
+    </div>
+    <div class="alltime">
+      ${stats.best ? `<div class="at-stat"><div class="at-label">Best month</div><div class="at-value pos">${signed(stats.best.change)}</div><div class="at-sub">${prettyMonth(stats.best.month)}</div></div>` : ''}
+      <div class="at-stat"><div class="at-label">Average per month</div><div class="at-value ${stats.avgChange >= 0 ? 'pos' : 'neg'}">${signed(stats.avgChange)}</div><div class="at-sub">across ${all.months} change${all.months === 1 ? '' : 's'}</div></div>
+      <div class="at-stat"><div class="at-label">Tracking since</div><div class="at-value">${stats.firstMonth ? prettyMonth(stats.firstMonth) : '—'}</div><div class="at-sub">${stats.monthsTracked} month${stats.monthsTracked === 1 ? '' : 's'} recorded</div></div>
+    </div>
+  </div>`;
+}
+
+// Proportional bar showing how much of the change was saving vs everything
+// else. Uses magnitudes so a negative component still reads sensibly.
+function mvBar(saved, other) {
+  const a = Math.abs(saved), b = Math.abs(other);
+  const tot = a + b;
+  if (!tot) return '';
+  return `<div class="mv-bar">
+    <span class="mv-seg mv-saved" style="width:${(a / tot * 100).toFixed(1)}%"></span>
+    <span class="mv-seg mv-other" style="width:${(b / tot * 100).toFixed(1)}%"></span>
+  </div>`;
 }
 
 // Shows who the month-over-month change actually came from, in each partner's
@@ -640,14 +761,17 @@ function renderTrendChart(months, avgSaved) {
 // ---- Insights --------------------------------------------------------------
 
 function averageCombinedMonthlySaved() {
-  // sum both partners' monthly_saved per month, average over recorded months (last 6)
-  const byMonth = {};
-  for (const e of state.entries) {
-    byMonth[e.month] = (byMonth[e.month] || 0) + e.monthly_saved;
+  // Each partner's own average over their last 6 recorded months, summed.
+  // Averaging the *combined* per-month totals instead would count a month only
+  // one of you logged as a full month at half the rate, understating the pace
+  // you actually save at — and that figure drives the projection, the
+  // on-track/behind status and the time-to-milestone insight.
+  let total = 0;
+  for (const p of state.partners) {
+    const own = partnerEntries(p.id).slice(-6);
+    if (own.length) total += own.reduce((a, e) => a + e.monthly_saved, 0) / own.length;
   }
-  const vals = Object.keys(byMonth).sort().slice(-6).map((m) => byMonth[m]);
-  if (!vals.length) return 0;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
+  return total;
 }
 
 function renderInsights(totals, avgSaved, combinedNow, delta) {
@@ -966,6 +1090,36 @@ function goalMetrics(g) {
   return { target, saved, remaining, pct, monthsLeft, perMonth, done: target > 0 && saved >= target };
 }
 
+// Goals track a hand-typed "saved so far", which drifts from reality. This
+// reconciles the total earmarked against the cash you actually hold, so
+// over-committing is visible rather than silent.
+function goalsFunding() {
+  let liquid = 0;
+  for (const p of state.partners) {
+    const e = latestEntry(p.id);
+    if (e) liquid += e.current_account + e.cash_savings;
+  }
+  const earmarked = state.goals.reduce((a, g) => a + (g.saved_amount || 0), 0);
+  return { liquid, earmarked, free: liquid - earmarked, over: earmarked > liquid };
+}
+
+function goalsFundingBar() {
+  const f = goalsFunding();
+  if (!state.goals.length) return '';
+  const pct = f.liquid > 0 ? clampPct(f.earmarked / f.liquid * 100) : (f.earmarked > 0 ? 100 : 0);
+  return `<div class="card section-gap funding-card">
+    <h3>Backed by real money</h3>
+    <div class="mv-row"><span>Earmarked across your goals</span><strong>${money(f.earmarked)}</strong></div>
+    <div class="mv-row"><span>Cash + current accounts you hold</span><strong>${money(f.liquid)}</strong></div>
+    <div class="pbar" style="margin-top:12px"><div class="pbar-fill ${f.over ? 'behind' : 'ok'}" style="width:${Math.max(2, pct)}%"></div></div>
+    <div class="funding-note ${f.over ? 'warnc' : ''}">
+      ${f.over
+        ? `&#9888;&#65039; Your goals claim ${money(f.earmarked - f.liquid)} more than you actually hold in cash. Either some of it sits in investments, or a goal's "saved so far" needs correcting.`
+        : `${money(f.free)} of your cash isn't yet earmarked for a goal.`}
+    </div>
+  </div>`;
+}
+
 function savingsGoalsSection() {
   const goals = state.goals;
   const editing = state.editingGoalId != null
@@ -1021,6 +1175,7 @@ function savingsGoalsSection() {
     </div>
     ${form}
     ${cards}
+    ${goalsFundingBar()}
   `;
 }
 

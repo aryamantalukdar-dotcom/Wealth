@@ -546,6 +546,54 @@ button:active { transform: scale(.97); }
 .welcome-step .body span { color: var(--muted); }
 .welcome-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* ---- goals backed by real money ---- */
+.funding-card .mv-row { padding: 3px 0; }
+.funding-note { margin-top: 10px; font-size: 12.5px; line-height: 1.5; color: var(--muted); font-weight: 600; }
+
+/* ---- stale-data warning ---- */
+.stale-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 15px; margin-bottom: 14px;
+  border-radius: 14px; font-size: 13.5px; font-weight: 600; line-height: 1.45;
+  color: var(--warn);
+  background: rgba(180, 83, 9, 0.10);
+  border: 1px solid rgba(180, 83, 9, 0.22);
+}
+.stale-banner strong { color: var(--text); }
+.stale-ico { flex-shrink: 0; font-size: 15px; line-height: 1.35; }
+
+/* ---- what moved your wealth ---- */
+.mv-block { min-width: 0; }
+.mv-head { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+.mv-rows { display: flex; flex-direction: column; gap: 7px; }
+.mv-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.mv-row > span { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.mv-row strong { font-weight: 800; white-space: nowrap; }
+.mv-total { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+.mv-total > span { color: var(--text); font-weight: 700; }
+.mv-dot-saved { background: linear-gradient(135deg, #0d9488, #06b6d4); }
+.mv-dot-other { background: linear-gradient(135deg, #4f46e5, #9333ea); }
+
+.mv-bar { display: flex; height: 9px; border-radius: var(--radius-pill); overflow: hidden; margin-top: 12px; background: rgba(30, 41, 59, 0.07); }
+.mv-seg { display: block; height: 100%; }
+.mv-seg.mv-saved { background: linear-gradient(90deg, #0d9488, #06b6d4); }
+.mv-seg.mv-other { background: linear-gradient(90deg, #4f46e5, #9333ea); }
+
+.mv-note {
+  margin-top: 16px; padding: 11px 14px; border-radius: 12px;
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+  background: rgba(30, 41, 59, 0.04); border: 1px solid var(--border);
+}
+
+.alltime { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.at-stat {
+  flex: 1 1 140px; min-width: 0; padding: 12px 14px;
+  border-radius: 14px; background: rgba(255, 255, 255, 0.55); border: 1px solid var(--border);
+}
+.at-label { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.at-value { font-size: 19px; font-weight: 800; }
+.at-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
 /* ---- dashboard head row (title + export) ---- */
 .dash-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dash-head > div:first-child { min-width: 0; }
