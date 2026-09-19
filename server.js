@@ -6,6 +6,7 @@ const express = require('express');
 const { db, init } = require('./db');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -19,6 +20,43 @@ if (PASSWORD === 'changeme') {
 const COOKIE = 'wealth_auth';
 // Cookie stores a hash of the password, never the password itself.
 const TOKEN = crypto.createHash('sha256').update(PASSWORD).digest('hex');
+
+const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest();
+
+// Comparing fixed-length digests keeps the check constant-time while avoiding
+// two bugs in comparing the raw strings: space-padding made "secret   " match
+// "secret", and an attempt longer than the pad length threw a RangeError
+// (surfacing as a 500 rather than a clean rejection).
+const PASSWORD_DIGEST = sha256(PASSWORD);
+const passwordMatches = (pw) => crypto.timingSafeEqual(sha256(pw), PASSWORD_DIGEST);
+
+// This app is on the public internet behind one shared password, so throttle
+// guessing. In-memory is enough for a single small instance; entries are
+// dropped once their window lapses so the map can't grow without bound.
+const MAX_ATTEMPTS = 8;
+const WINDOW_MS = 15 * 60 * 1000;
+const attempts = new Map(); // ip -> { count, resetAt }
+
+function loginBlockedFor(ip) {
+  const rec = attempts.get(ip);
+  if (!rec) return 0;
+  if (Date.now() > rec.resetAt) { attempts.delete(ip); return 0; }
+  return rec.count >= MAX_ATTEMPTS ? Math.ceil((rec.resetAt - Date.now()) / 1000) : 0;
+}
+
+function noteFailure(ip) {
+  const rec = attempts.get(ip);
+  if (!rec || Date.now() > rec.resetAt) {
+    attempts.set(ip, { count: 1, resetAt: Date.now() + WINDOW_MS });
+  } else {
+    rec.count += 1;
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of attempts) if (now > rec.resetAt) attempts.delete(ip);
+}, WINDOW_MS).unref();
 
 function readCookie(req, name) {
   const header = req.headers.cookie || '';
@@ -34,15 +72,30 @@ function isAuthed(req) {
 }
 
 app.post('/api/login', (req, res) => {
+  const ip = req.ip || 'unknown';
+  const blockedFor = loginBlockedFor(ip);
+  if (blockedFor) {
+    res.setHeader('Retry-After', String(blockedFor));
+    return res.status(429).json({
+      error: `Too many attempts. Try again in ${Math.ceil(blockedFor / 60)} minute(s).`,
+    });
+  }
+
   const pw = String((req.body || {}).password || '');
-  if (pw && crypto.timingSafeEqual(Buffer.from(pw.padEnd(64)), Buffer.from(PASSWORD.padEnd(64)))) {
+  if (pw && passwordMatches(pw)) {
+    attempts.delete(ip);
     const thirtyDays = 60 * 60 * 24 * 30;
+    // Secure only when the request actually arrived over TLS, so local http
+    // development still works while the hosted app gets the flag.
+    const secure = req.secure ? ' Secure;' : '';
     res.setHeader(
       'Set-Cookie',
-      `${COOKIE}=${TOKEN}; HttpOnly; Path=/; Max-Age=${thirtyDays}; SameSite=Lax`
+      `${COOKIE}=${TOKEN}; HttpOnly;${secure} Path=/; Max-Age=${thirtyDays}; SameSite=Lax`
     );
     return res.json({ ok: true });
   }
+
+  noteFailure(ip);
   res.status(401).json({ error: 'Wrong password' });
 });
 
