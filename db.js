@@ -64,12 +64,29 @@ async function init() {
     );
   `);
 
-  // Additive migration: monthly notes on entries. SQLite has no
-  // "ADD COLUMN IF NOT EXISTS", so check the table shape first. Existing rows
-  // keep their data; the column simply defaults to empty.
+  // Additive migrations. SQLite has no "ADD COLUMN IF NOT EXISTS", so check the
+  // table shape first. Existing rows keep their data.
   const cols = await db.execute('PRAGMA table_info(entries)');
-  if (!cols.rows.some((c) => c.name === 'note')) {
+  const hasCol = (n) => cols.rows.some((c) => c.name === n);
+
+  if (!hasCol('note')) {
     await db.execute(`ALTER TABLE entries ADD COLUMN note TEXT NOT NULL DEFAULT ''`);
+  }
+
+  // Money deliberately paid in, split by destination. Everything else about a
+  // month (cash left over, debt cleared, market movement) is derived from the
+  // balances, so these are the only two figures that have to be declared.
+  if (!hasCol('paid_savings')) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN paid_savings REAL NOT NULL DEFAULT 0`);
+  }
+  if (!hasCol('paid_investments')) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN paid_investments REAL NOT NULL DEFAULT 0`);
+    // One-time backfill, inside the branch that creates the column so it can
+    // only ever run once: the old single "saved this month" figure is carried
+    // over as money paid into investments.
+    if (hasCol('monthly_saved')) {
+      await db.execute('UPDATE entries SET paid_investments = monthly_saved');
+    }
   }
 
   // Seed the two partners on first run.

@@ -200,23 +200,29 @@ app.post('/api/entries', async (req, res, next) => {
       cash_savings: num(b.cash_savings),
       investments: num(b.investments),
       monthly_saved: num(b.monthly_saved),
+      paid_savings: Math.max(0, num(b.paid_savings)),
+      paid_investments: Math.max(0, num(b.paid_investments)),
       note: String(b.note || '').slice(0, 200),
       updated_at: new Date().toISOString(),
     };
 
     await db.execute({
       sql: `INSERT INTO entries
-         (partner_id, month, current_account, credit_card, cash_savings, investments, monthly_saved, note, updated_at)
+         (partner_id, month, current_account, credit_card, cash_savings, investments,
+          monthly_saved, paid_savings, paid_investments, note, updated_at)
        VALUES
-         (:partner_id, :month, :current_account, :credit_card, :cash_savings, :investments, :monthly_saved, :note, :updated_at)
+         (:partner_id, :month, :current_account, :credit_card, :cash_savings, :investments,
+          :monthly_saved, :paid_savings, :paid_investments, :note, :updated_at)
        ON CONFLICT(partner_id, month) DO UPDATE SET
-         current_account = :current_account,
-         credit_card     = :credit_card,
-         cash_savings    = :cash_savings,
-         investments     = :investments,
-         monthly_saved   = :monthly_saved,
-         note            = :note,
-         updated_at      = :updated_at`,
+         current_account  = :current_account,
+         credit_card      = :credit_card,
+         cash_savings     = :cash_savings,
+         investments      = :investments,
+         monthly_saved    = :monthly_saved,
+         paid_savings     = :paid_savings,
+         paid_investments = :paid_investments,
+         note             = :note,
+         updated_at       = :updated_at`,
       args,
     });
 
