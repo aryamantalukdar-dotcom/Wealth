@@ -101,14 +101,23 @@ const gbp = new Intl.NumberFormat('en-GB', {
 const gbp2 = new Intl.NumberFormat('en-GB', {
   style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
-const money = (n) => gbp.format(Math.round(n || 0));
+// Uses a true minus sign rather than the hyphen Intl emits, so a negative
+// figure matches the "−" used everywhere else money is shown.
+const money = (n) => {
+  const v = Math.round(n || 0);
+  return (v < 0 ? '−' : '') + gbp.format(Math.abs(v));
+};
 const signed = (n) => (n >= 0 ? '+' : '−') + gbp.format(Math.abs(Math.round(n || 0)));
 
-const CATS = [
-  { key: 'current_account', label: 'Current accounts', color: '#3b82f6', debt: false },
-  { key: 'cash_savings',    label: 'Cash savings',     color: '#10b981', debt: false },
-  { key: 'investments',     label: 'Investments',      color: '#8b5cf6', debt: false },
-  { key: 'credit_card',     label: 'Credit card debt', color: '#f43f5e', debt: true  },
+// What you own, then what you owe. Kept in this order so the breakdown reads as
+// the sum it actually is: assets, less debt, equals net worth.
+const ASSET_CATS = [
+  { key: 'current_account', label: 'Current accounts', color: '#3b82f6' },
+  { key: 'cash_savings',    label: 'Cash savings',     color: '#10b981' },
+  { key: 'investments',     label: 'Investments',      color: '#8b5cf6' },
+];
+const DEBT_CATS = [
+  { key: 'credit_card',     label: 'Credit card debt', color: '#f43f5e' },
 ];
 
 // net worth of a single entry row
@@ -594,17 +603,24 @@ function statCard(label, value, cls = '', icon = '') {
 
 function renderBreakdown(totals) {
   const el = document.getElementById('breakdown');
-  const assets = totals.current_account + totals.cash_savings + totals.investments;
-  const rows = CATS.map((c) => {
-    const v = totals[c.key];
-    return `<div class="breakdown-row">
-      <span class="cat"><span class="dot" style="background:${c.color}"></span>${c.label}</span>
-      <span class="${c.debt && v > 0 ? 'neg' : ''}">${c.debt && v > 0 ? '−' : ''}${money(v)}</span>
-    </div>`;
-  }).join('');
-  el.innerHTML = rows + `
-    <div class="breakdown-row" style="margin-top:6px;border-top:1px solid var(--border);font-weight:700">
-      <span>Total assets</span><span>${money(assets)}</span>
+  const assets = ASSET_CATS.reduce((a, c) => a + totals[c.key], 0);
+  const debts = DEBT_CATS.reduce((a, c) => a + totals[c.key], 0);
+
+  const row = (c, negative) => `<div class="breakdown-row">
+    <span class="cat"><span class="dot" style="background:${c.color}"></span>${c.label}</span>
+    <span class="${negative ? 'neg' : ''}">${negative ? '−' : ''}${money(totals[c.key])}</span>
+  </div>`;
+
+  // Debt is listed below the assets subtotal and carries a minus sign, so the
+  // figures on screen add up to the same net worth shown in the hero rather
+  // than to a total that quietly ignores what is owed.
+  el.innerHTML =
+    ASSET_CATS.map((c) => row(c, false)).join('') +
+    `<div class="breakdown-row bd-sub"><span>Total assets</span><span>${money(assets)}</span></div>` +
+    DEBT_CATS.map((c) => row(c, true)).join('') +
+    `<div class="breakdown-row bd-net">
+      <span>Net worth</span>
+      <span class="${assets - debts < 0 ? 'neg' : ''}">${money(assets - debts)}</span>
     </div>`;
 }
 

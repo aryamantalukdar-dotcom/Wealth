@@ -314,6 +314,12 @@ button:active { transform: scale(.97); }
 .breakdown-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; gap: 10px; }
 .breakdown-row:last-child { border-bottom: 0; }
 .breakdown-row .cat { color: var(--muted); display: flex; align-items: center; gap: 8px; font-weight: 600; }
+/* Assets subtotal, then debt, then the net worth the rest of the page shows. */
+.breakdown-row.bd-sub { margin-top: 6px; border-top: 1px solid var(--border); font-weight: 700; }
+.breakdown-row.bd-net {
+  margin-top: 6px; border-top: 2px solid var(--border); border-bottom: 0;
+  font-weight: 800; font-size: 15px;
+}
 .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; box-shadow: 0 0 6px currentColor; flex-shrink: 0; }
 
 .insight { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--border); }
