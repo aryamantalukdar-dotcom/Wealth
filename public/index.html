@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#f4f6fc" />
+  <meta name="theme-color" content="#EDEBE4" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Our Wealth" />
   <title>Our Wealth Dashboard</title>
+  <link rel="preload" href="/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <!-- Root-absolute so the icons resolve from any route, and real PNGs rather
@@ -19,7 +20,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
   <link rel="icon" type="image/svg+xml" href="/icons/logo.svg" />
-  <link rel="mask-icon" href="/icons/logo.svg" color="#9333ea" />
+  <link rel="mask-icon" href="/icons/logo.svg" color="#14140F" />
 </head>
 <body>
   <header class="topbar">
@@ -42,16 +43,16 @@
 
   <nav class="bottomnav" id="bottomnav" aria-label="Sections">
     <button class="tab bnav" data-view="dashboard">
-      <span class="bnav-ico">🏠</span><span class="bnav-label">Home</span>
+      <span class="bnav-ico"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.2" y="1.2" width="13.6" height="13.6" stroke="currentColor" stroke-width="1.6"/></svg></span><span class="bnav-label">Home</span>
     </button>
     <button class="tab bnav" data-view="p1">
-      <span class="bnav-ico avatar av1" data-avatar="p1">1</span><span class="bnav-label" data-label="p1">Partner 1</span>
+      <span class="bnav-ico avatar av1" data-avatar="p1"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.6"/></svg></span><span class="bnav-label" data-label="p1">Partner 1</span>
     </button>
     <button class="tab bnav" data-view="p2">
-      <span class="bnav-ico avatar av2" data-avatar="p2">2</span><span class="bnav-label" data-label="p2">Partner 2</span>
+      <span class="bnav-ico avatar av2" data-avatar="p2"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.4 14.8 14.6H1.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span><span class="bnav-label" data-label="p2">Partner 2</span>
     </button>
     <button class="tab bnav" data-view="targets">
-      <span class="bnav-ico">🎯</span><span class="bnav-label">Targets</span>
+      <span class="bnav-ico"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg></span><span class="bnav-label">Targets</span>
     </button>
   </nav>
 

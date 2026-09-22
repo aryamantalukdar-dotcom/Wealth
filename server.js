@@ -124,12 +124,15 @@ app.get(Object.keys(ROOT_ICONS), (req, res) => {
   res.sendFile(path.join(ICON_DIR, ROOT_ICONS[req.path]));
 });
 
-// Gate everything else. The PWA manifest and icons stay public: browsers fetch
-// the manifest without cookies, so gating them would silently break
-// add-to-home-screen installability (and they contain nothing sensitive).
+// Gate everything else. The PWA manifest, icons and fonts stay public: browsers
+// fetch the manifest without cookies, so gating it would silently break
+// add-to-home-screen installability, and the sign-in page needs the typeface
+// before anyone is authenticated. None of them contain anything sensitive.
 app.use((req, res, next) => {
   if (isAuthed(req)) return next();
-  if (req.path === '/manifest.webmanifest' || req.path.startsWith('/icons/')) return next();
+  if (req.path === '/manifest.webmanifest'
+    || req.path.startsWith('/icons/')
+    || req.path.startsWith('/fonts/')) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
   return res.redirect('/login');
 });
