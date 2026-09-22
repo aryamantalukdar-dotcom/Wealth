@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#f4f6fc" />
+  <meta name="theme-color" content="#EDEBE4" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Our Wealth" />
@@ -14,77 +14,74 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
   <link rel="icon" type="image/svg+xml" href="/icons/logo.svg" />
-  <link rel="mask-icon" href="/icons/logo.svg" color="#9333ea" />
+  <link rel="mask-icon" href="/icons/logo.svg" color="#14140F" />
   <style>
+    /* Swiss grid: same tokens as the app, inlined so the sign-in page needs no
+       stylesheet round-trip before it can paint. */
+    @font-face {
+      font-family: 'Archivo';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url('/fonts/archivo-latin.woff2') format('woff2');
+    }
+    :root { --paper: #EDEBE4; --ink: #14140F; --muted: #5B584C; --rule: #C9C5B6; --neg: #B23A1B; }
     * { box-sizing: border-box; }
-    html { background: #f4f6fc; color-scheme: light; }
+    html { background: var(--paper); color-scheme: light; -webkit-text-size-adjust: 100%; }
     body {
-      margin: 0; min-height: 100vh; display: grid; place-items: center;
-      padding: 24px max(24px, env(safe-area-inset-right)) 24px max(24px, env(safe-area-inset-left));
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: #f4f6fc; color: #191d2e; position: relative;
+      margin: 0;
+      min-height: 100vh; min-height: 100dvh;
+      display: grid; place-items: center;
+      padding: 32px max(20px, env(safe-area-inset-right)) 32px max(20px, env(safe-area-inset-left));
+      background: var(--paper); color: var(--ink);
+      font-family: 'Archivo', ui-sans-serif, -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
       -webkit-tap-highlight-color: transparent;
     }
-    body::before {
-      content: '';
-      position: fixed; inset: -10vmax; z-index: -1;
-      background:
-        radial-gradient(36vmax 36vmax at 16% 12%, rgba(99,102,241,.40), transparent 62%),
-        radial-gradient(32vmax 32vmax at 88% 18%, rgba(232,121,249,.34), transparent 62%),
-        radial-gradient(38vmax 38vmax at 22% 92%, rgba(52,211,153,.30), transparent 62%),
-        radial-gradient(28vmax 28vmax at 92% 90%, rgba(34,211,238,.26), transparent 62%),
-        #f4f6fc;
-      animation: drift 50s ease-in-out infinite alternate;
-    }
-    @keyframes drift {
-      0%   { transform: scale(1) translate(0,0) rotate(0deg); }
-      100% { transform: scale(1.08) translate(-2%,2%) rotate(2deg); }
-    }
-    @media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
     .card {
-      width: min(380px, 100%);
-      background:
-        linear-gradient(135deg, rgba(255,255,255,.75), rgba(255,255,255,.15) 45%),
-        linear-gradient(180deg, rgba(255,255,255,.68), rgba(255,255,255,.38));
-      border: 1px solid rgba(255,255,255,.8);
-      -webkit-backdrop-filter: blur(24px) saturate(190%);
-      backdrop-filter: blur(24px) saturate(190%);
-      border-radius: 28px; padding: 36px 30px;
-      box-shadow: 0 16px 44px rgba(30,41,59,.14), 0 2px 8px rgba(30,41,59,.06), inset 0 1px 0 rgba(255,255,255,.8);
+      width: min(360px, 100%);
+      background: none;
+      border: 0;
+      border-top: 1.5px solid var(--ink);
+      padding: 26px 0 0;
     }
-    .brand { display: block; width: 60px; height: 60px; margin: 0 auto; border-radius: 15px; }
+    .brand { display: block; width: 40px; height: 40px; }
     h1 {
-      font-size: 20px; text-align: center; margin: 8px 0 26px; font-weight: 800;
-      background: linear-gradient(90deg, #4338ca, #a21caf);
-      -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+      font-size: 26px; font-weight: 700; letter-spacing: -0.03em;
+      margin: 16px 0 26px; color: var(--ink);
     }
-    label { display: block; font-size: 13px; color: #5c6280; margin-bottom: 8px; font-weight: 700; }
+    label {
+      display: block; margin-bottom: 8px;
+      font-size: 10px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase;
+      color: var(--muted);
+    }
     input {
-      width: 100%; padding: 13px 15px; border-radius: 14px; border: 1px solid rgba(30,41,59,.12);
-      background: rgba(255,255,255,.55); color: #191d2e; font-size: 16px; outline: none;
-      transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+      width: 100%; padding: 12px; min-height: 44px;
+      border: 1px solid var(--rule); border-radius: 0;
+      background: #fff; color: var(--ink);
+      font-family: inherit; font-size: 16px; outline: none;
+      transition: border-color .12s linear, box-shadow .12s linear;
     }
-    input:focus {
-      border-color: #4f46e5; background: rgba(255,255,255,.85);
-      box-shadow: 0 0 0 4px rgba(79,70,229,.18);
-    }
+    input:focus { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
     button {
-      width: 100%; margin-top: 18px; padding: 13px; border: none; border-radius: 999px;
-      min-height: 48px;
-      background: linear-gradient(135deg, #4f46e5, #a21caf);
-      color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-      box-shadow: 0 8px 22px rgba(79,70,229,.35), inset 0 1px 0 rgba(255,255,255,.35);
-      transition: transform .12s ease, filter .15s ease;
+      width: 100%; margin-top: 18px; padding: 13px; min-height: 48px;
+      border: 1.5px solid var(--ink); border-radius: 0;
+      background: var(--ink); color: var(--paper);
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+      transition: background .12s linear, color .12s linear;
     }
-    button:hover { filter: brightness(1.08); }
-    button:active { transform: scale(.98); }
-    button:disabled { opacity: .6; cursor: default; }
-    .err { color: #be123c; font-size: 13px; margin-top: 12px; min-height: 18px; text-align: center; font-weight: 600; }
+    button:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
+    button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    button:disabled { opacity: .45; cursor: default; }
+    .err { color: var(--neg); font-size: 13px; margin-top: 12px; min-height: 18px; font-weight: 600; }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
   </style>
 </head>
 <body>
   <form class="card" id="form">
-    <img class="brand" src="/icons/logo.svg" alt="Our Wealth" width="60" height="60" />
+    <img class="brand" src="/icons/logo.svg" alt="" width="40" height="40" />
     <h1>Our Wealth</h1>
     <label for="password">Password</label>
     <input type="password" id="password" autocomplete="current-password" autofocus />

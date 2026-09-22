@@ -111,13 +111,18 @@ const signed = (n) => (n >= 0 ? '+' : '−') + gbp.format(Math.abs(Math.round(n 
 
 // What you own, then what you owe. Kept in this order so the breakdown reads as
 // the sum it actually is: assets, less debt, equals net worth.
+// Composition marks are steps of one ink ramp, not four hues: the row label
+// beside each mark already carries identity, so spending four categorical
+// colours here would be decoration that has to survive colourblindness for
+// nothing. Debt alone gets the reserved negative colour. Values come from the
+// stylesheet so it stays the single source of truth for the palette.
 const ASSET_CATS = [
-  { key: 'current_account', label: 'Current accounts', color: '#3b82f6' },
-  { key: 'cash_savings',    label: 'Cash savings',     color: '#10b981' },
-  { key: 'investments',     label: 'Investments',      color: '#8b5cf6' },
+  { key: 'current_account', label: 'Current accounts', color: 'var(--tone-1)' },
+  { key: 'cash_savings',    label: 'Cash savings',     color: 'var(--tone-2)' },
+  { key: 'investments',     label: 'Investments',      color: 'var(--tone-3)' },
 ];
 const DEBT_CATS = [
-  { key: 'credit_card',     label: 'Credit card debt', color: '#f43f5e' },
+  { key: 'credit_card',     label: 'Credit card debt', color: 'var(--neg)' },
 ];
 
 // net worth of a single entry row
@@ -131,11 +136,35 @@ const partnerName = (id) => (state.partners.find((p) => p.id === id) || {}).name
 // always matches the tab gradients.
 const cssVar = (name, fallback) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-const partnerColor = (id) => cssVar(id === 1 ? '--p1' : '--p2', id === 1 ? '#0d9488' : '#9333ea');
-const partnerGrad = (id) => [
-  partnerColor(id),
-  cssVar(id === 1 ? '--p1-2' : '--p2-2', id === 1 ? '#06b6d4' : '#c026d3'),
-];
+const partnerColor = (id) => cssVar(id === 1 ? '--p1' : '--p2', id === 1 ? '#3153A0' : '#578429');
+// Flat language: a partner is one colour, never a gradient. The two were
+// picked together so the split bar survives colourblindness (see styles.css).
+const partnerInk = (id) => cssVar(id === 1 ? '--p1-ink' : '--p2-ink', partnerColor(id));
+
+// Geometric line icons. The Swiss grid has no emoji in its chrome: every mark is
+// a square, circle, triangle or rule at the same 16px box and 1.6 stroke, so the
+// icon column reads as one system rather than as pictures.
+const ICON = (() => {
+  const w = (d) => `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">${d}</svg>`;
+  const S = 'stroke="currentColor" stroke-width="1.6"';
+  return {
+    home:     w(`<rect x="1.2" y="1.2" width="13.6" height="13.6" ${S}/>`),
+    person1:  w(`<circle cx="8" cy="8" r="6.4" ${S}/>`),
+    person2:  w(`<path d="M8 1.4 14.8 14.6H1.2Z" ${S} stroke-linejoin="round"/>`),
+    target:   w(`<circle cx="8" cy="8" r="6.4" ${S}/><circle cx="8" cy="8" r="2" fill="currentColor"/>`),
+    buffer:   w(`<rect x="1.2" y="4" width="13.6" height="9" ${S}/><path d="M1.2 7.4h13.6" ${S}/>`),
+    debt:     w(`<circle cx="8" cy="8" r="6.4" ${S}/><path d="M5 8h6" ${S}/>`),
+    rising:   w(`<path d="M1.5 13 6 8l3 2.6 5.5-7" ${S} stroke-linecap="square"/>`),
+    idea:     w(`<path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" ${S}/><circle cx="8" cy="8" r="2.6" ${S}/>`),
+    cash:     w(`<rect x="1.2" y="3" width="13.6" height="10" ${S}/><circle cx="8" cy="8" r="2.2" ${S}/>`),
+    calendar: w(`<rect x="1.2" y="2.6" width="13.6" height="12.2" ${S}/><path d="M1.2 6.2h13.6M5 1.2v2.6M11 1.2v2.6" ${S}/>`),
+    done:     w(`<path d="M2 8.4 6.2 12.6 14 3.6" ${S} stroke-linecap="square"/>`),
+    warn:     w(`<path d="M8 1.4 14.8 14.6H1.2Z" ${S} stroke-linejoin="round"/><path d="M8 6v3.4" ${S}/><rect x="7.2" y="11.2" width="1.6" height="1.6" fill="currentColor"/>`),
+    strong:   w(`<rect x="1.2" y="9" width="3.6" height="5.8" ${S}/><rect x="6.2" y="5.6" width="3.6" height="9.2" ${S}/><rect x="11.2" y="1.8" width="3.6" height="13" ${S}/>`),
+    tune:     w(`<path d="M3 14V8M3 5V2M8 14v-4M8 7V2M13 14V9M13 6V2" ${S}/><path d="M1.4 8h3.2M6.4 10h3.2M11.4 9h3.2" ${S}/>`),
+    link:     w(`<path d="M6.4 9.6 9.6 6.4" ${S}/><path d="M7 4.2 8.6 2.6a3 3 0 0 1 4.2 4.2l-1.6 1.6" ${S}/><path d="M9 11.8l-1.6 1.6a3 3 0 0 1-4.2-4.2l1.6-1.6" ${S}/>`),
+  };
+})();
 
 // entries for one partner, oldest -> newest
 const partnerEntries = (id) =>
@@ -313,9 +342,9 @@ function render() {
     const name = partnerName(id);
     const isDefault = /^partner \d$/i.test(name);
     const label = document.querySelector(`[data-label="p${id}"]`);
-    const avatar = document.querySelector(`[data-avatar="p${id}"]`);
     if (label) label.textContent = isDefault ? name : name.split(' ')[0];
-    if (avatar) avatar.textContent = isDefault ? String(id) : (name[0] || String(id)).toUpperCase();
+    // The nav mark stays a fixed geometric shape (circle / triangle) in that
+    // partner's colour — shape and colour together, so it reads without either.
   }
 
   if (state.view === 'dashboard') renderDashboard();
@@ -412,31 +441,29 @@ function renderDashboard() {
         <h1 class="view-title">Combined wealth</h1>
         <p class="view-sub">${escapeHtml(partnerName(1))} &amp; ${escapeHtml(partnerName(2))} · updated figures roll up here automatically.</p>
       </div>
-      <button class="btn-ghost btn-small" id="exportBtn" title="Download all recorded figures as a spreadsheet">⬇ Export CSV</button>
+      <button class="btn-ghost btn-small" id="exportBtn" title="Download all recorded figures as a spreadsheet">Export CSV</button>
     </div>
 
     ${staleBanner()}
 
     <div class="hero">
-      <div>
-        <div class="label">Total net worth</div>
-        <div class="value ${combinedNow >= 0 ? '' : 'neg'}">${money(combinedNow)}</div>
-        ${delta !== null
-          ? `<div class="delta ${delta >= 0 ? 'pos' : 'neg'}">${signed(delta)} vs last recorded month</div>
-             ${deltaSplit(deltaParts)}`
-          : `<div class="delta" style="color:var(--muted)">Add a second month to see your trend</div>`}
-      </div>
-      <div style="text-align:right">
-        <div class="label">Saved together / month (avg)</div>
-        <div class="value" style="font-size:30px" >${money(avgSaved)}</div>
+      <div class="label">Total net worth</div>
+      <div class="value ${combinedNow >= 0 ? '' : 'neg'}">${money(combinedNow)}</div>
+      ${delta !== null
+        ? `<div class="delta ${delta >= 0 ? 'pos' : 'neg'}">${signed(delta)} vs last recorded month</div>
+           ${deltaSplit(deltaParts)}`
+        : `<div class="delta">Add a second month to see your trend</div>`}
+      <div class="hero-sub">
+        <span class="label">Saved together / month (avg)</span>
+        <span class="value">${money(avgSaved)}</span>
       </div>
     </div>
 
     <div class="grid cols-4 section-gap">
-      ${statCard('Liquid (cash + accounts)', money(liquid), '', '💷')}
-      ${statCard('Investments', money(totals.investments), '', '📈')}
-      ${statCard('Credit card debt', money(totals.credit_card), totals.credit_card > 0 ? 'neg' : '', '💳')}
-      ${statCard('Saved this month', latestMove ? money(latestMove.saved) : '—', '', '🐷')}
+      ${statCard('Liquid (cash + accounts)', money(liquid))}
+      ${statCard('Investments', money(totals.investments))}
+      ${statCard('Credit card debt', money(totals.credit_card), totals.credit_card > 0 ? 'neg' : '')}
+      ${statCard('Saved this month', latestMove ? money(latestMove.saved) : '—')}
     </div>
 
     <div class="grid cols-2 section-gap">
@@ -446,7 +473,7 @@ function renderDashboard() {
       </div>
       <div class="card">
         <h3>Who holds what (net worth split)</h3>
-        <div class="chart-wrap"><canvas id="splitChart"></canvas></div>
+        <div id="splitBar"></div>
         <div class="split-legend" id="splitLegend"></div>
       </div>
     </div>
@@ -510,7 +537,7 @@ function staleBanner() {
   if (!stale.length) return '';
   const who = stale.map((s) => `<strong>${escapeHtml(s.name)}</strong> (since ${prettyMonth(s.since)})`).join(' and ');
   return `<div class="stale-banner">
-    <span class="stale-ico">&#9888;&#65039;</span>
+    <span class="stale-ico">${ICON.warn}</span>
     <span>Showing carried-forward figures for ${who}. Totals below may be out of date until they add this month.</span>
   </div>`;
 }
@@ -583,20 +610,21 @@ function mvBar(saved, other) {
 function deltaSplit(parts) {
   if (!parts.length) return '';
   return `<div class="delta-split">${parts.map((d) => {
-    const [from, to] = partnerGrad(d.id);
+    const c = partnerColor(d.id);
     const label = d.stale
       ? `<span class="delta-stale">no update yet</span>`
       : `<strong class="${d.change >= 0 ? 'pos' : 'neg'}">${signed(d.change)}</strong>`;
     return `<span class="delta-part">
-      <span class="dot" style="background:linear-gradient(135deg, ${from}, ${to})"></span>
+      <span class="dot" style="background:${c}"></span>
       ${escapeHtml(d.name)} ${label}
     </span>`;
   }).join('')}</div>`;
 }
 
-function statCard(label, value, cls = '', icon = '') {
+// A stat is a ruled row: label left, figure right. No icon — in this language
+// the rules and the left margin do the separating.
+function statCard(label, value, cls = '') {
   return `<div class="card stat">
-    ${icon ? `<div class="stat-ico">${icon}</div>` : ''}
     <div class="label">${label}</div><div class="value ${cls}">${value}</div>
   </div>`;
 }
@@ -624,56 +652,32 @@ function renderBreakdown(totals) {
     </div>`;
 }
 
-// Draws the combined total in the doughnut's hollow centre. Uses the real
-// combined net worth (chart.$trueTotal) rather than summing the drawn slice
-// values, which are clamped at zero and would overstate the total if either
-// partner is in the red.
-const centreTotalPlugin = {
-  id: 'centreTotal',
-  afterDraw(chart) {
-    const total = chart.$trueTotal ?? chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-    const { ctx } = chart;
-    // anchor to the arc's own centre so the label always sits in the hollow,
-    // even mid-resize
-    const arc = chart.getDatasetMeta(0).data[0];
-    if (!arc) return;
-    const cx = arc.x;
-    const cy = arc.y;
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#5c6280';
-    ctx.font = '600 12px -apple-system, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText('Together', cx, cy - 14);
-    ctx.fillStyle = '#191d2e';
-    ctx.font = '800 22px -apple-system, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(money(total), cx, cy + 8);
-    ctx.restore();
-  },
-};
-
+// A single stacked proportion bar, drawn in plain HTML rather than a ring.
+// Flat and geometric by construction, it scales to any width, needs no canvas,
+// and — unlike a doughnut — stays readable at 320px. The two fills are the
+// validated partner pair, separated by a 2px paper gap.
 function renderSplitChart() {
   // True net worth per partner, which can legitimately be negative.
   const actual = state.partners.map((p) => {
     const e = latestEntry(p.id);
     return e ? entryNet(e) : 0;
   });
-  // A doughnut can only draw non-negative magnitudes, so the slice sizes are
+  // A proportion bar can only draw non-negative magnitudes, so the widths are
   // clamped — but every number we *print* uses the real figure, and a partner
   // in the red is labelled as such rather than silently shown as £0.
   const data = actual.map((v) => Math.max(0, v));
+  const bar = document.getElementById('splitBar');
   const legend = document.getElementById('splitLegend');
-  const grads = [partnerGrad(1), partnerGrad(2)];
+  if (!bar || !legend) return;
 
   if (actual.every((d) => d === 0)) {
-    document.getElementById('splitChart').parentElement.innerHTML =
-      '<div class="empty">Add figures on each partner tab to see the split.</div>';
+    bar.innerHTML = '<div class="empty">Add figures on each partner tab to see the split.</div>';
     legend.innerHTML = '';
     return;
   }
   if (data.every((d) => d === 0)) {
-    // Everyone is in the red: a ring would be meaningless, so state it plainly.
-    document.getElementById('splitChart').parentElement.innerHTML =
+    // Everyone is in the red: a proportion bar would be meaningless, so say so.
+    bar.innerHTML =
       `<div class="empty">You're both in the red right now — clearing debt is the first win.<br>` +
       state.partners.map((p, i) => `${escapeHtml(p.name)}: <strong class="neg">${money(actual[i])}</strong>`).join(' · ') +
       `</div>`;
@@ -681,53 +685,24 @@ function renderSplitChart() {
     return;
   }
 
-  // Canvas gradients per segment, matching each partner's tab gradient.
-  const arcGradient = (ctx2) => {
-    const { chart, dataIndex } = ctx2;
-    const area = chart.chartArea;
-    const [from, to] = grads[dataIndex] || grads[0];
-    if (!area) return from;
-    const g = chart.ctx.createLinearGradient(area.left, area.top, area.right, area.bottom);
-    g.addColorStop(0, from);
-    g.addColorStop(1, to);
-    return g;
-  };
-
-  charts.split = new Chart(document.getElementById('splitChart'), {
-    type: 'doughnut',
-    data: {
-      labels: state.partners.map((p) => p.name),
-      datasets: [{
-        data,
-        backgroundColor: arcGradient,
-        borderWidth: 0,
-        borderRadius: 12,
-        spacing: 5,
-        hoverOffset: 8,
-      }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: '68%',
-      layout: { padding: 8 },
-      plugins: {
-        legend: { display: false },
-        // tooltips quote the real figure, including a negative one
-        tooltip: { callbacks: { label: (c) => `${c.label}: ${money(actual[c.dataIndex])}` } },
-      },
-    },
-    plugins: [centreTotalPlugin],
-  });
-  charts.split.$trueTotal = actual.reduce((a, b) => a + b, 0);
-  charts.split.update('none');
-
-  // Percentages are shares of the positive holdings the ring actually depicts;
-  // a partner in the red gets "in the red" instead of a meaningless 0%.
   const positiveTotal = data.reduce((a, b) => a + b, 0) || 1;
+  const pct = data.map((v) => (v / positiveTotal) * 100);
+
+  bar.innerHTML = `<div class="splitbar" role="img" aria-label="${state.partners
+    .map((p, i) => `${escapeHtml(p.name)} ${Math.round(pct[i])} percent`).join(', ')}">` +
+    state.partners.map((p, i) =>
+      pct[i] > 0 ? `<span class="sb-${i + 1}" style="width:${pct[i]}%"></span>` : ''
+    ).join('') + `</div>`;
+
+  // Percentages are shares of the positive holdings the bar actually depicts;
+  // a partner in the red gets "in the red" instead of a meaningless 0%.
   legend.innerHTML = state.partners.map((p, i) => {
     const share = actual[i] < 0
       ? '<span class="neg">in the red</span>'
-      : `${Math.round(data[i] / positiveTotal * 100)}%`;
-    return `<span><span class="dot" style="background:linear-gradient(135deg, ${grads[i][0]}, ${grads[i][1]})"></span>${escapeHtml(p.name)} — <span class="${actual[i] < 0 ? 'neg' : ''}">${money(actual[i])}</span> (${share})</span>`;
+      : `${Math.round(pct[i])}%`;
+    return `<span><span class="dot" style="background:${partnerColor(p.id)}"></span>` +
+      `${escapeHtml(p.name)} <span class="num ${actual[i] < 0 ? 'neg' : ''}">${money(actual[i])}</span> ` +
+      `<span style="color:var(--muted)">${share}</span></span>`;
   }).join('');
 }
 
@@ -756,16 +731,10 @@ function renderTrendChart(months, avgSaved) {
   // pad historical series with nulls for projection months
   const pad = (arr) => arr.concat(new Array(projLabels.length).fill(null));
 
-  // Soft vertical fade under the Combined line (indigo, the dashboard's colour).
-  const combinedFill = (ctx2) => {
-    const { chart } = ctx2;
-    const area = chart.chartArea;
-    if (!area) return 'rgba(79,70,229,.12)';
-    const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
-    g.addColorStop(0, 'rgba(79,70,229,.22)');
-    g.addColorStop(1, 'rgba(79,70,229,0)');
-    return g;
-  };
+  // Flat theme, read from the stylesheet so the chart can never drift from it.
+  const INK = cssVar('--ink', '#14140F');
+  const MUTED = cssVar('--muted', '#5B584C');
+  const RULE = cssVar('--rule', '#C9C5B6');
 
   charts.trend = new Chart(document.getElementById('trendChart'), {
     type: 'line',
@@ -773,20 +742,23 @@ function renderTrendChart(months, avgSaved) {
       labels: allLabels,
       datasets: [
         {
-          label: 'Combined', data: pad(combined), borderColor: '#4f46e5', backgroundColor: combinedFill,
-          borderWidth: 3, fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#4f46e5',
+          // Combined is the neutral: ink, not a hue, which keeps the two
+          // partner colours the only categorical pair on the plot.
+          label: 'Combined', data: pad(combined), borderColor: INK, backgroundColor: 'transparent',
+          borderWidth: 2, fill: false, tension: 0, pointRadius: 0, pointHoverRadius: 5,
+          pointBackgroundColor: INK,
         },
         {
-          label: partnerName(1), data: pad(p1), borderColor: partnerColor(1), borderWidth: 2, tension: .35,
-          pointRadius: 2, spanGaps: true,
+          label: partnerName(1), data: pad(p1), borderColor: partnerColor(1), borderWidth: 2, tension: 0,
+          pointRadius: 0, pointHoverRadius: 5, spanGaps: true,
         },
         {
-          label: partnerName(2), data: pad(p2), borderColor: partnerColor(2), borderWidth: 2, tension: .35,
-          pointRadius: 2, spanGaps: true,
+          label: partnerName(2), data: pad(p2), borderColor: partnerColor(2), borderWidth: 2, tension: 0,
+          pointRadius: 0, pointHoverRadius: 5, spanGaps: true,
         },
         {
-          label: 'Projected', data: projData, borderColor: '#7c3aed', borderDash: [6, 5],
-          borderWidth: 2, tension: .35, pointRadius: 0, fill: false,
+          label: 'Projected', data: projData, borderColor: INK, borderDash: [5, 4],
+          borderWidth: 1.5, tension: 0, pointRadius: 0, fill: false,
         },
       ],
     },
@@ -794,7 +766,12 @@ function renderTrendChart(months, avgSaved) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { labels: { color: '#475569', usePointStyle: true, boxWidth: 8 } },
+        legend: {
+          labels: {
+            color: MUTED, usePointStyle: true, pointStyle: 'rect', boxWidth: 9, boxHeight: 9,
+            font: { size: 11, weight: '600' },
+          },
+        },
         tooltip: {
           callbacks: {
             label: (c) => c.parsed.y == null ? null : `${c.dataset.label}: ${money(c.parsed.y)}`,
@@ -804,14 +781,23 @@ function renderTrendChart(months, avgSaved) {
               if (!month) return [];
               return state.entries
                 .filter((e) => e.month === month && e.note)
-                .map((e) => `📝 ${partnerName(e.partner_id)}: ${e.note}`);
+                .map((e) => `${partnerName(e.partner_id)}: ${e.note}`);
             },
           },
         },
       },
       scales: {
-        x: { grid: { color: 'rgba(15,23,42,.07)' }, ticks: { color: '#64748b' } },
-        y: { grid: { color: 'rgba(15,23,42,.07)' }, ticks: { color: '#64748b', callback: (v) => money(v) } },
+        // Recessive: hairline horizontals only, no vertical grid, no axis borders.
+        x: {
+          grid: { display: false },
+          border: { color: INK, width: 1.5 },
+          ticks: { color: MUTED, font: { size: 10 }, maxRotation: 0, autoSkipPadding: 14 },
+        },
+        y: {
+          grid: { color: RULE, lineWidth: 1, drawTicks: false },
+          border: { display: false },
+          ticks: { color: MUTED, font: { size: 10 }, padding: 8, callback: (v) => money(v) },
+        },
       },
     },
   });
@@ -842,24 +828,24 @@ function renderInsights(totals, avgSaved, combinedNow, delta) {
   // so express liquid savings as months of buffer using their own saving as a rough scale.
   const liquid = totals.current_account + totals.cash_savings;
   if (liquid > 0) {
-    items.push(insight('🛟', 'Emergency buffer',
+    items.push(insight(ICON.buffer, 'Emergency buffer',
       `You hold ${money(liquid)} in cash and current accounts. A common target is 3–6 months of expenses — keep this topped up before locking money into investments.`));
   }
 
   // 2. Credit card debt — the highest priority, since APR usually beats investment returns.
   if (totals.credit_card > 0) {
     const monthsToClear = avgSaved > 0 ? Math.ceil(totals.credit_card / avgSaved) : null;
-    items.push(insight('🔴', 'Clear the credit card first',
+    items.push(insight(ICON.debt, 'Clear the credit card first',
       `You owe ${money(totals.credit_card)} on credit cards. At typical ~20%+ APR this costs more than most investments earn, so redirecting savings here usually beats investing. ${
         monthsToClear ? `At your current saving pace you could clear it in about ${monthsToClear} month${monthsToClear === 1 ? '' : 's'}.` : ''}`));
   }
 
   // 3. Savings rate / momentum
   if (avgSaved > 0) {
-    items.push(insight('📈', 'Saving momentum',
+    items.push(insight(ICON.rising, 'Saving momentum',
       `Together you're putting away about ${money(avgSaved)} a month. That's ${money(avgSaved * 12)} a year — automating a standing order on payday is the easiest way to protect it.`));
   } else {
-    items.push(insight('💡', 'Set a monthly savings target',
+    items.push(insight(ICON.idea, 'Set a monthly savings target',
       `No monthly savings recorded yet. Add a "saved this month" figure on each partner tab — even a small automatic transfer compounds over time.`));
   }
 
@@ -868,7 +854,7 @@ function renderInsights(totals, avgSaved, combinedNow, delta) {
   if (liquid > 0 && investable >= 0) {
     const ratio = investable / (liquid + investable || 1);
     if (liquid > investable * 3 && liquid > 10000) {
-      items.push(insight('🧺', 'A lot sitting in cash',
+      items.push(insight(ICON.cash, 'A lot sitting in cash',
         `About ${Math.round((1 - ratio) * 100)}% of your assets are in cash. Once your emergency buffer is set, money beyond it may grow faster in tax-efficient investments (e.g. ISAs).`));
     }
   }
@@ -878,7 +864,7 @@ function renderInsights(totals, avgSaved, combinedNow, delta) {
     const target = nextMilestone(combinedNow);
     const monthsTo = Math.ceil((target - combinedNow) / avgSaved);
     if (monthsTo > 0 && monthsTo < 600) {
-      items.push(insight('🎯', `On track for ${money(target)}`,
+      items.push(insight(ICON.target, `On track for ${money(target)}`,
         `At ${money(avgSaved)}/month you'll reach a combined net worth of ${money(target)} in about ${monthsTo} months (${(monthsTo / 12).toFixed(1)} years) — before any investment growth.`));
     }
   }
@@ -906,7 +892,7 @@ function renderPartner(id) {
   appEl.innerHTML = `
     <div class="partner-head">
       <h1 class="view-title">${escapeHtml(partnerName(id))}'s finances</h1>
-      <button class="btn-ghost rename-btn" id="renameToggle">✏️ Rename</button>
+      <button class="btn-ghost rename-btn" id="renameToggle">Rename</button>
     </div>
     <div class="name-edit" id="nameEdit" hidden>
       <input id="pname" value="${escapeAttr(partnerName(id))}" aria-label="Your name" maxlength="40" />
@@ -915,10 +901,10 @@ function renderPartner(id) {
     <p class="view-sub">Update your figures each month. The dashboard combines them automatically.</p>
 
     <div class="grid cols-4">
-      ${statCard('Your net worth', money(net), net >= 0 ? '' : 'neg', '💰')}
-      ${statCard('Liquid', money(latest ? latest.current_account + latest.cash_savings : 0), '', '💷')}
-      ${statCard('Investments', money(latest ? latest.investments : 0), '', '📈')}
-      ${statCard('Card debt', money(latest ? latest.credit_card : 0), latest && latest.credit_card > 0 ? 'neg' : '', '💳')}
+      ${statCard('Your net worth', money(net), net >= 0 ? '' : 'neg')}
+      ${statCard('Liquid', money(latest ? latest.current_account + latest.cash_savings : 0))}
+      ${statCard('Investments', money(latest ? latest.investments : 0))}
+      ${statCard('Card debt', money(latest ? latest.credit_card : 0), latest && latest.credit_card > 0 ? 'neg' : '')}
     </div>
 
     <div class="card section-gap">
@@ -995,7 +981,7 @@ function renderPartner(id) {
     monthNote.hidden = false;
     if (existing) {
       monthNote.className = 'month-note update';
-      monthNote.textContent = `✏️ Editing ${prettyMonth(month)} — saving updates your existing figures`;
+      monthNote.textContent = `Editing ${prettyMonth(month)} — saving updates your existing figures`;
     } else {
       monthNote.className = 'month-note new';
       monthNote.textContent = latest
@@ -1118,7 +1104,7 @@ function historyTable(es) {
     const delta = older ? entryNet(e) - entryNet(older) : null;
     return `
     <tr data-id="${e.id}">
-      <td>${prettyMonth(e.month)}${e.note ? ` <span class="note-chip" title="${escapeAttr(e.note)}">📝 ${escapeHtml(e.note)}</span>` : ''}</td>
+      <td>${prettyMonth(e.month)}${e.note ? ` <span class="note-chip" title="${escapeAttr(e.note)}">${escapeHtml(e.note)}</span>` : ''}</td>
       <td>${money(e.current_account)}</td>
       <td>${money(e.cash_savings)}</td>
       <td>${money(e.investments)}</td>
@@ -1132,7 +1118,7 @@ function historyTable(es) {
       </td>
     </tr>`;
   }).join('');
-  return `<div style="overflow-x:auto"><table>
+  return `<div class="table-wrap"><table>
     <thead><tr>
       <th>Month</th><th>Current a/c</th><th>Cash</th><th>Investments</th>
       <th>Card debt</th><th>Paid in</th><th>Net worth</th><th>Change</th><th></th>
@@ -1258,7 +1244,7 @@ function goalCard(g) {
   const when = g.target_month ? prettyMonth(g.target_month) : null;
   let status;
   if (m.done) {
-    status = `🎉 Fully funded`;
+    status = `Fully funded`;
   } else if (m.monthsLeft === 0 && when) {
     status = `${when} passed · ${money(m.remaining)} short`;
   } else if (m.perMonth) {
@@ -1271,7 +1257,7 @@ function goalCard(g) {
       <span class="goal-emoji">${escapeHtml(g.emoji || '🎯')}</span>
       <div class="goal-name">${escapeHtml(g.name)}</div>
       <div class="goal-actions">
-        <button class="btn-ghost btn-small goal-edit" aria-label="Edit goal">✏️</button>
+        <button class="btn-ghost btn-small goal-edit" aria-label="Edit goal">Edit</button>
         <button class="btn-danger btn-small goal-del" aria-label="Delete goal">✕</button>
       </div>
     </div>
@@ -1413,7 +1399,7 @@ function renderTargets() {
           </div>
         </div>
         <div class="link-note">
-          🔗 These two are linked. ${isPast
+          These two are linked. ${isPast
             ? `${year} is over, so they can't be recalculated from months remaining.`
             : `From today's net worth of <strong>${money(m.netNow)}</strong> and <strong>${m.monthsLeft} ${monthWord}</strong> left in ${year}, changing one updates the other automatically.`}
         </div>
@@ -1531,16 +1517,16 @@ function renderTargetInsights(m, year) {
 
   if (t.net_worth_target) {
     if (m.nwGap <= 0) {
-      items.push(insight('🎯', 'Net-worth goal reached',
+      items.push(insight(ICON.done, 'Net-worth goal reached',
         `You're at ${money(m.netNow)}, already past your ${money(t.net_worth_target)} target for ${year}. Time to set a bolder one.`));
     } else if (isPast) {
-      items.push(insight('📅', 'Net-worth window closed',
+      items.push(insight(ICON.calendar, 'Net-worth window closed',
         `${year} has ended — you finished ${money(m.nwGap)} short of ${money(t.net_worth_target)}. Roll the gap into next year's goal.`));
     } else if (m.avgSaved >= m.nwReqMonthly) {
-      items.push(insight('✅', 'On track for your net-worth goal',
+      items.push(insight(ICON.done, 'On track for your net-worth goal',
         `You need about ${money(m.nwReqMonthly)}/month over the ${m.monthsLeft} months left, and you're saving ${money(m.avgSaved)}. Any investment growth is a bonus on top.`));
     } else {
-      items.push(insight('⚠️', 'Behind on net-worth goal',
+      items.push(insight(ICON.warn, 'Behind on net-worth goal',
         `Reaching ${money(t.net_worth_target)} needs ~${money(m.nwReqMonthly)}/month for ${m.monthsLeft} months, but you're saving ${money(m.avgSaved)} — a ${money(m.nwReqMonthly - m.avgSaved)}/month gap. Investment growth can close part of it; the rest means saving more or extending the deadline.`));
     }
   }
@@ -1548,17 +1534,17 @@ function renderTargetInsights(m, year) {
   if (t.monthly_savings_target) {
     const diff = m.avgSaved - t.monthly_savings_target;
     if (diff >= 0) {
-      items.push(insight('💪', 'Beating your monthly target',
+      items.push(insight(ICON.strong, 'Beating your monthly target',
         `Your average ${money(m.avgSaved)}/month is ${money(diff)} above the ${money(t.monthly_savings_target)} you're aiming for. Funnel the extra at your credit card first, then investments.`));
     } else {
-      items.push(insight('🔧', 'Closing the monthly gap',
+      items.push(insight(ICON.tune, 'Closing the monthly gap',
         `You're ${money(-diff)}/month below your ${money(t.monthly_savings_target)} target. Easy wins: a payday standing order, trimming one recurring subscription, or sending any windfall straight to savings.`));
     }
   }
 
   // Explain how the two linked goals connect for this year.
   if (t.monthly_savings_target && t.net_worth_target && !isPast) {
-    items.push(insight('🔗', 'How your goals connect',
+    items.push(insight(ICON.link, 'How your goals connect',
       `Saving ${money(t.monthly_savings_target)}/month for the ${m.monthsLeft} ${m.monthsLeft === 1 ? 'month' : 'months'} left, on top of today's ${money(m.netNow)}, is exactly what lands you at ${money(t.net_worth_target)} by December. Change either target and the other follows.`));
   }
 
@@ -1623,12 +1609,12 @@ function celebrate() {
   if (reducedMotion) return;
   const host = document.createElement('div');
   host.className = 'confetti';
-  const glyphs = ['🎉', '✨', '💷', '🎊', '⭐'];
+  // Geometric marks rather than emoji: square, circle, triangle, rule.
+  const shapes = ['cf-sq', 'cf-ci', 'cf-tri', 'cf-ru'];
   for (let i = 0; i < 26; i++) {
     const s = document.createElement('span');
-    s.textContent = glyphs[i % glyphs.length];
+    s.className = shapes[i % shapes.length];
     s.style.left = (Math.random() * 100).toFixed(1) + 'vw';
-    s.style.fontSize = Math.round(14 + Math.random() * 14) + 'px';
     s.style.setProperty('--dur', (1.8 + Math.random() * 1.6).toFixed(2) + 's');
     s.style.setProperty('--delay', (Math.random() * 0.8).toFixed(2) + 's');
     host.appendChild(s);

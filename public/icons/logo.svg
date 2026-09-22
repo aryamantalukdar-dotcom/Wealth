@@ -1,31 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Our Wealth">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4f46e5"/>
-      <stop offset="0.55" stop-color="#9333ea"/>
-      <stop offset="1" stop-color="#db2777"/>
-    </linearGradient>
-
-    <!-- Knocks the pound sign out of the solid coin so the gradient shows through. -->
-    <mask id="coin">
-      <circle cx="316" cy="262" r="116" fill="#fff"/>
-      <text x="318" y="314" text-anchor="middle"
-            font-family="Georgia, 'Times New Roman', serif"
-            font-size="168" font-weight="700" fill="#000">£</text>
-    </mask>
-
-    <!-- Punches a gap in the back ring where the coin crosses in front. -->
-    <mask id="weave">
-      <rect width="512" height="512" fill="#fff"/>
-      <circle cx="316" cy="262" r="140" fill="#000"/>
-    </mask>
-  </defs>
-
-  <rect width="512" height="512" rx="114" fill="url(#bg)"/>
-
-  <!-- The ring behind: the second of you. -->
-  <circle cx="192" cy="262" r="104" fill="none" stroke="#ffffff" stroke-width="36" mask="url(#weave)"/>
-
-  <!-- The coin in front, pound knocked out. -->
-  <circle cx="316" cy="262" r="116" fill="#ffffff" mask="url(#coin)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Our Wealth">
+  <!-- Flat and geometric: an ink field with three ascending bars, the last in
+       vermilion. No gradient, no rounding — the same language as the app. -->
+  <rect width="64" height="64" fill="#14140F"/>
+  <rect x="11" y="37" width="11" height="16" fill="#EDEBE4"/>
+  <rect x="26.5" y="28" width="11" height="25" fill="#EDEBE4"/>
+  <rect x="42" y="17" width="11" height="36" fill="#B23A1B"/>
 </svg>
