@@ -536,6 +536,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 input[type="text"], input[type="number"], input[type="month"], input[type="password"], select, textarea {
   width: 100%;
+  /* A form control's min-width resolves to its intrinsic size, so without these
+     a control can refuse to shrink and push the page wider than the viewport. */
+  min-width: 0;
+  max-width: 100%;
   font-family: inherit;
   font-size: 16px; /* keeps iOS from zooming on focus */
   font-variant-numeric: tabular-nums;
@@ -548,6 +552,56 @@ input[type="text"], input[type="number"], input[type="month"], input[type="passw
   outline: none;
   transition: border-color .12s linear, box-shadow .12s linear;
 }
+
+/* Date/month controls, which WebKit sizes from their inner value box rather
+   than from the width set on the element. On iOS that box keeps its intrinsic
+   width, overflows the field and drags the whole page into a small horizontal
+   scroll — visible on the partner tabs, the only ones with a month picker.
+   Dropping the native appearance and containing the inner parts makes the
+   control obey its own box, so it matches every other field on the page. */
+input[type="month"], input[type="date"], input[type="time"], input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  overflow: hidden;
+  display: block;          /* WebKit defaults these to inline-block */
+  text-align: left;
+  /* 20px is exactly the content height of the text/number fields at 16px with
+     11px padding and a 1px border, so the month box is the same 44px as them. */
+  line-height: 20px;
+}
+/* The inner edit box inherits the host's padding, so it computes to the full
+   field width PLUS 24px and the full height PLUS 22px — which is what pushes
+   past the field on iOS and made the control 2px deeper than its neighbours.
+   Zeroing the padding and pinning it to the content box fixes both. */
+input[type="month"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  height: 20px;
+  line-height: 20px;
+}
+input[type="month"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+  min-width: 0;
+}
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  flex-shrink: 0;
+  /* sized to the 20px content box: left to itself the indicator is taller than
+     the line and makes the field 2px deeper than every other input */
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0 0 0 auto;
+  opacity: .55;
+}
+/* WebKit's inner spin buttons add width these fields do not need */
+input[type="month"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-inner-spin-button { display: none; }
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
