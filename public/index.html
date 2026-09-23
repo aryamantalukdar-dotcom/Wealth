@@ -14,13 +14,17 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <!-- Root-absolute so the icons resolve from any route, and real PNGs rather
        than an emoji in an SVG data URI (which many browsers won't rasterise,
-       leaving bookmarks and the iOS home screen with a grey letter tile). -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
-  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/icons/apple-touch-icon.png" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
-  <link rel="icon" type="image/svg+xml" href="/icons/logo.svg" />
-  <link rel="mask-icon" href="/icons/logo.svg" color="#14140F" />
+       leaving bookmarks and the iOS home screen with a grey letter tile).
+       The ?v= suffix is there because bookmark favicons and home-screen tiles
+       are cached by URL, outside normal HTTP caching: redrawing the logo under
+       the same file names leaves devices showing the old one. Bump it (here,
+       in login.html and in manifest.webmanifest) whenever the icons change. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png?v=2" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/icons/apple-touch-icon.png?v=2" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=2" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png?v=2" />
+  <link rel="icon" type="image/svg+xml" href="/icons/logo.svg?v=2" />
+  <link rel="mask-icon" href="/icons/logo.svg?v=2" color="#14140F" />
 </head>
 <body>
   <header class="topbar">
